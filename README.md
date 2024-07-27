@@ -1,6 +1,6 @@
 # AnimeFLV App
 
-Esta aplicación en Python te permite buscar series de anime en AnimeFLV, visualizar episodios, ver enlaces de video y consultar los últimos animes. Utiliza la biblioteca `tkinter` para la interfaz gráfica y `requests` junto con `BeautifulSoup` para extraer datos de AnimeFLV.
+Esta aplicación en Python permite buscar series de anime en AnimeFLV, visualizar episodios, ver enlaces de video y consultar los últimos animes. Utiliza la biblioteca `tkinter` para la interfaz gráfica y `requests` junto con `BeautifulSoup` para extraer datos de AnimeFLV.
 
 ## Requisitos
 
@@ -9,7 +9,7 @@ Esta aplicación en Python te permite buscar series de anime en AnimeFLV, visual
   - `requests`
   - `beautifulsoup4`
   - `pillow`
-  - `tkinter` (incluido con la instalación de Python)
+  - `tkinter` (generalmente incluido con la instalación de Python)
 
 ## Instalación
 
@@ -30,11 +30,11 @@ Nota: tkinter generalmente viene preinstalado con Python. Si no está instalado,
 Uso
 Ejecutar la aplicación:
 
-Navega al directorio del proyecto y ejecuta el script animeflv_app.py con Python:
+Navega al directorio del proyecto y ejecuta el script AnimeFLV.py con Python:
 
 sh
 Copiar código
-python animeflv_app.py
+python AnimeFLV.py
 Interfaz de Usuario:
 
 Pestaña "Buscar Serie":
@@ -82,12 +82,9 @@ Para cualquier pregunta o soporte, contacta a tu_correo@dominio.com.
 markdown
 Copiar código
 
-### Instrucciones de Uso:
+### Notas Importantes:
 
-- **Instalación**: Clona el repositorio y usa `pip` para instalar las dependencias necesarias.
-- **Ejecución**: Corre el script `animeflv_app.py` usando Python.
-- **Interfaz de Usuario**:
-  - **Buscar Serie**: Permite buscar y explorar series de anime.
-  - **Últimos Animes**: Muestra los últimos animes con la opción de ver detalles adicionales.
+- **Reemplaza** `https://github.com/tu_usuario/animeflv-app.git` con la URL de tu repositorio en GitHub si está disponible.
+- **Actualiza** el correo electrónico en la sección de contacto con tu dirección real si es necesario.
 
-Puedes personalizar el contenido del README según tus necesidades y el nombre del repositorio en GitHub. ¡Espero que esto te ayude a empezar con tu proyecto!
+Este `README.md` proporciona una guía completa para instalar, ejecutar y usar la aplicación. ¡Espero que te sea útil!
