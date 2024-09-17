@@ -3,8 +3,13 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import re
+import logging
 
 app = Flask(__name__)
+
+# Configuración de logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def extraer_datos_de_script(html):
     """Extrae la información de los episodios del script JavaScript en el HTML."""
@@ -101,25 +106,47 @@ def buscar_serie(nombre_serie):
 def obtener_ultimos_animes():
     """Obtiene los últimos animes de AnimeFLV."""
     url_ultimos_animes = "https://www3.animeflv.net"
-    response = requests.get(url_ultimos_animes)
-    if response.status_code != 200:
+    try:
+        logger.info(f"Realizando solicitud GET a {url_ultimos_animes}")
+        response = requests.get(url_ultimos_animes)
+        response.raise_for_status()  # Lanza una excepción si el código de estado no es 200
+        logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        logger.info("Buscando la lista de animes en la página")
+        lista_animes = soup.find('ul', class_='ListEpisodios AX Rows A06 C04 D03')
+        
+        if not lista_animes:
+            logger.warning("No se encontró la lista de animes")
+            return []
+        
+        animes = []
+        for item in lista_animes.find_all('li'):
+            try:
+                enlace = item.find('a', href=True)
+                titulo = item.find('strong', class_='Title')
+                episodio = item.find('span', class_='Capi')
+                
+                if enlace and titulo and episodio:
+                    animes.append({
+                        'titulo': titulo.text.strip(),
+                        'enlace': 'https://www3.animeflv.net' + enlace['href'],
+                        'episodio': episodio.text.strip()
+                    })
+                else:
+                    logger.warning(f"Elemento faltante en uno de los ítems: {item}")
+            except Exception as e:
+                logger.error(f"Error al procesar un elemento: {e}")
+        
+        logger.info(f"Animes encontrados: {len(animes)}")
+        return animes
+    except requests.RequestException as e:
+        logger.error(f"Error en la solicitud HTTP: {e}")
         return []
-    soup = BeautifulSoup(response.text, 'html.parser')
-    lista_animes = soup.find('ul', class_='ListEpisodios AX Rows A06 C04 D03')
-    if not lista_animes:
+    except Exception as e:
+        logger.error(f"Error inesperado: {e}")
         return []
-    animes = []
-    for item in lista_animes.find_all('li'):
-        enlace = item.find('a', href=True)
-        titulo = item.find('strong', class_='Title')
-        episodio = item.find('span', class_='Capi')
-        if enlace and titulo and episodio:
-            animes.append({
-                'titulo': titulo.text.strip(),
-                'enlace': 'https://www3.animeflv.net' + enlace['href'],
-                'episodio': episodio.text.strip()
-            })
-    return animes
 
 def obtener_imagen_y_descripcion(url_serie):
     """Obtiene la imagen y la descripción de una serie desde su URL."""
