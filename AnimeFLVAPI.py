@@ -180,6 +180,11 @@ def api_obtener_imagen_y_descripcion():
     else:
         return jsonify({'error': 'No se pudo obtener la imagen o descripción.'}), 404
 
+@app.route('/api/test', methods=['GET'])
+def test():
+    return jsonify({'status': 'OK', 'message': 'API funcionando correctamente'})
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
 
