@@ -149,8 +149,14 @@ def obtener_ultimos_animes():
                 episodio = item.find('span', class_='Capi')
                 portada = item.find('span', class_='Image')
                 img_tag = portada.find('img')
+                match = re.search(r'/([^/]+)-\d+$', enlace['href'])  # Captura la parte antes del número final
+                if match:
+                    id = match.group(1)  # Capturamos el nombre sin el número
+                else:
+                    id = enlace['href'].split('/')[-1]  # Si no coincide, usamos el valor completo
                 if enlace and titulo and episodio:
                     animes.append({
+                        'id':id,
                         'titulo': titulo.text.strip(),
                         'enlace': 'https://www3.animeflv.net' + enlace['href'],
                         'episodio': episodio.text.strip(),
