@@ -68,6 +68,8 @@ def obtener_videos(url_episodio):
 
 def obtener_episodios(url_serie):
     """Obtiene todos los episodios disponibles para la serie."""
+    url_serie = url_serie.replace('/ver/', '/anime/')
+    url_serie = re.sub(r'-\d+$', '', url_serie)  # Eliminar el número final de la URL
     response = requests.get(url_serie)
     if response.status_code != 200:
         print("Error al acceder a la página de la serie.")
@@ -159,7 +161,7 @@ class AnimeFLVApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Buscador de Series AnimeFLV")
-        self.root.geometry("1600x800")  # Ajustado el tamaño de la ventana principal
+        self.root.geometry("1700x800")  # Ajustado el tamaño de la ventana principal
 
         # Crear el notebook para las pestañas
         self.notebook = ttk.Notebook(self.root)
@@ -187,7 +189,7 @@ class AnimeFLVApp:
         self.lbl_nombre = ttk.Label(self.frame_busqueda, text="Nombre de la serie:")
         self.lbl_nombre.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
 
-        self.entry_nombre = ttk.Entry(self.frame_busqueda, width=50)
+        self.entry_nombre = ttk.Entry(self.frame_busqueda, width=100)
         self.entry_nombre.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
         self.entry_nombre.bind("<Return>", self.buscar_serie)  # Buscar al presionar Enter
 
@@ -198,30 +200,33 @@ class AnimeFLVApp:
         self.tree_series = ttk.Treeview(self.frame_busqueda, columns=("Serie", "URL"), show="headings", height=10)
         self.tree_series.heading("Serie", text="Serie")
         self.tree_series.heading("URL", text="URL")
-        self.tree_series.column("Serie", width=300)
-        self.tree_series.column("URL", width=500)
+        self.tree_series.column("Serie", width=200)
+        self.tree_series.column("URL", width=200)
         self.tree_series.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=5)
         self.tree_series.bind("<ButtonRelease-1>", self.cargar_episodios)
 
         self.tree_episodios = ttk.Treeview(self.frame_busqueda, columns=("Episodio", "URL"), show="headings", height=10)
         self.tree_episodios.heading("Episodio", text="Episodio")
         self.tree_episodios.heading("URL", text="URL")
-        self.tree_episodios.column("Episodio", width=300)
-        self.tree_episodios.column("URL", width=500)
-        self.tree_episodios.grid(row=1, column=3, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=5)
+        self.tree_episodios.column("Episodio", width=200)
+        self.tree_episodios.column("URL", width=200)
+        self.tree_episodios.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=5)
         self.tree_episodios.bind("<ButtonRelease-1>", self.cargar_videos)
 
         self.tree_videos = ttk.Treeview(self.frame_busqueda, columns=("Título", "Enlace"), show="headings", height=10)
         self.tree_videos.heading("Título", text="Título")
         self.tree_videos.heading("Enlace", text="Enlace")
-        self.tree_videos.column("Título", width=600)
-        self.tree_videos.column("Enlace", width=800)
-        self.tree_videos.grid(row=2, column=0, columnspan=5, sticky=(tk.W, tk.E), padx=5, pady=5)
-        self.tree_videos.bind("<Button-1>", self.abrir_enlace)
+        self.tree_videos.column("Título", width=200)
+        self.tree_videos.column("Enlace", width=200)
+        self.tree_videos.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=5)
+        self.tree_videos.bind("<Double-1>", self.abrir_enlace)
 
         self.loading_label = ttk.Label(self.frame_busqueda, text="Verificando enlaces...", foreground="blue")
-        self.loading_label.grid(row=3, column=0, columnspan=5, sticky=(tk.W, tk.E), padx=5, pady=5)
+        self.loading_label.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=5)
         self.loading_label.grid_forget()
+
+        
+
 
     def crear_interfaz_ultimos(self, frame):
         """Crea la interfaz para mostrar los últimos animes en la pestaña correspondiente."""
@@ -261,10 +266,37 @@ class AnimeFLVApp:
         self.desc_label = ttk.Label(self.frame_detalle, wraplength=400, justify=tk.LEFT)
         self.desc_label.pack(side=tk.LEFT, padx=10, fill=tk.BOTH, expand=True)
 
+        # Crear la tabla de capítulos
+        self.tree_capitulos = ttk.Treeview(self.frame_detalle, columns=("Capítulo", "Enlace"), show="headings", height=10)
+        self.tree_capitulos.heading("Capítulo", text="Capítulo")
+        self.tree_capitulos.heading("Enlace", text="Enlace")
+        self.tree_capitulos.column("Capítulo", width=150)
+        self.tree_capitulos.column("Enlace", width=250)
+        self.tree_capitulos.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        # self.tree_capitulos.bind("<Button-1>", self.abrir_enlace)
+
         # Configurar el peso de las filas y columnas
         self.frame_ultimos.grid_rowconfigure(0, weight=1)
         self.frame_ultimos.grid_columnconfigure(0, weight=1)
         self.frame_ultimos.grid_columnconfigure(1, weight=2)
+
+
+      # Crear un frame adicional para los botones
+        self.frame_botones = ttk.Frame(self.frame_busqueda)
+        self.frame_botones.grid(row=4, column=0, columnspan=3, pady=5, sticky=tk.EW)
+
+        self.frame_botones.columnconfigure(0, weight=1)
+        self.frame_botones.columnconfigure(1, weight=1)
+        self.frame_botones.columnconfigure(2, weight=1)
+
+        self.btn_viendo = ttk.Button(self.frame_botones, text="Estoy viendo", command=self.marcar_como_viendo)
+        self.btn_viendo.grid(row=0, column=0, padx=5, pady=5, sticky=tk.EW)
+
+        self.btn_pendiente = ttk.Button(self.frame_botones, text="Pendiente", command=self.marcar_como_pendiente)
+        self.btn_pendiente.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
+
+        self.btn_terminado = ttk.Button(self.frame_botones, text="Terminado", command=self.marcar_como_terminado)
+        self.btn_terminado.grid(row=0, column=2, padx=5, pady=5, sticky=tk.EW)
 
     def buscar_serie(self, event=None):
         nombre_serie = self.entry_nombre.get()
@@ -332,16 +364,48 @@ class AnimeFLVApp:
             self.img_label.config(image=self.img_label.img)
             # Actualizar la descripción
             self.desc_label.config(text=descripcion)
+            
+            # Cargar y mostrar los episodios de la serie
+            episodios = obtener_episodios(url)
+            self.tree_capitulos.delete(*self.tree_capitulos.get_children())
+            for episodio in episodios:
+                self.tree_capitulos.insert("", "end", values=(episodio['episodio'], episodio['enlace']))
         else:
             self.img_label.config(image='')  # Borra la imagen
             self.desc_label.config(text="No se encontró descripción.")  # Mensaje de error
+            self.tree_capitulos.delete(*self.tree_capitulos.get_children())  # Borra los capítulos
 
     def abrir_enlace(self, event):
         item = self.tree_videos.selection()
         if not item:
             return
         url = self.tree_videos.item(item[0], "values")[1]
-        webbrowser.open(url)
+        if url:
+            webbrowser.open(url)
+
+    def marcar_como_viendo(self):
+        selected_item = self.tree_series.selection()
+        if not selected_item:
+            messagebox.showinfo("Información", "Por favor, selecciona una serie.")
+            return
+        serie = self.tree_series.item(selected_item[0])['values'][0]
+        messagebox.showinfo("Información", f"La serie '{serie}' se ha marcado como 'Estoy viendo'.")
+
+    def marcar_como_pendiente(self):
+        selected_item = self.tree_series.selection()
+        if not selected_item:
+            messagebox.showinfo("Información", "Por favor, selecciona una serie.")
+            return
+        serie = self.tree_series.item(selected_item[0])['values'][0]
+        messagebox.showinfo("Información", f"La serie '{serie}' se ha marcado como 'Pendiente'.")
+
+    def marcar_como_terminado(self):
+        selected_item = self.tree_series.selection()
+        if not selected_item:
+            messagebox.showinfo("Información", "Por favor, selecciona una serie.")
+            return
+        serie = self.tree_series.item(selected_item[0])['values'][0]
+        messagebox.showinfo("Información", f"La serie '{serie}' se ha marcado como 'Terminado'.")
 
 if __name__ == "__main__":
     root = tk.Tk()
