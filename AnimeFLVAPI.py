@@ -41,45 +41,31 @@ def obtener_nombre_serie(url_serie):
 
 def obtener_videos(url_episodio):
     """Extrae la información del video disponible para un episodio desde el script JavaScript."""
-    session = HTMLSession()
+    response = requests.get(url_episodio)
+    if response.status_code != 200:
+        return []
+    soup = BeautifulSoup(response.text, 'html.parser')
+    script = soup.find('script', string=lambda t: t and 'var videos = ' in t)
+    if not script:
+        return []
+    script_content = script.string
+    start_index = script_content.find('var videos = ') + len('var videos = ')
+    end_index = script_content.find(';', start_index)
+    videos_data = script_content[start_index:end_index].strip()
     try:
-        logger.info(f"Realizando solicitud GET a {url_episodio}")
-        response = session.get(url_episodio,headers={'User-Agent': 'Mozilla/5.0'})
-        response.raise_for_status()
-        logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
-        response.html.render(timeout=20)  # Renderizar JavaScript
-        soup = BeautifulSoup(response.content, 'html.parser')
-        script = soup.find('script', string=lambda t: t and 'var videos = ' in t)
-        if not script:
-            logger.warning("No se encontró el script con los datos de videos.")
-            return []
-        script_content = script.string
-        start_index = script_content.find('var videos = ') + len('var videos = ')
-        end_index = script_content.find(';', start_index)
-        videos_data = script_content[start_index:end_index].strip()
-        try:
-            videos = json.loads(videos_data)
-        except json.JSONDecodeError:
-            logger.error("Error al decodificar los datos JSON del script de videos.")
-            return []
-        video_info = []
-        for video_type, video_list in videos.items():
-            for video in video_list:
-                video_info.append({
-                    'titulo': video.get('title', 'No disponible'),
-                    'url': video.get('url', ''),
-                    'server': video.get('server', ''),
-                    'code': video.get('code', '')
-                })
-        return video_info
-    except requests.RequestException as e:
-        logger.error(f"Error en la solicitud HTTP: {e}")
+        videos = json.loads(videos_data)
+    except json.JSONDecodeError:
         return []
-    except Exception as e:
-        logger.error(f"Error inesperado: {e}")
-        return []
-    finally:
-        session.close()
+    video_info = []
+    for video_type, video_list in videos.items():
+        for video in video_list:
+            video_info.append({
+                'titulo': video.get('title', 'No disponible'),
+                'url': video.get('url', ''),
+                'server': video.get('server', ''),
+                'code': video.get('code', '')
+            })
+    return video_info
 
 def obtener_episodios(url_serie):
     """Obtiene todos los episodios disponibles para la serie."""
