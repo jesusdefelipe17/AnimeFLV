@@ -44,7 +44,7 @@ def obtener_videos(url_episodio):
     session = HTMLSession()
     try:
         logger.info(f"Realizando solicitud GET a {url_episodio}")
-        response = session.get(url_episodio)
+        response = session.get(url_episodio,headers={'User-Agent': 'Mozilla/5.0'})
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         response.html.render(timeout=20)  # Renderizar JavaScript
@@ -87,7 +87,7 @@ def obtener_episodios(url_serie):
     url_serie = re.sub(r'-\d+$', '', url_serie)  # Eliminar el número final de la URL
     try:
         logger.info(f"Realizando solicitud GET a {url_serie}")
-        response = requests.get(url_serie)
+        response = requests.get(url_serie,headers={'User-Agent': 'Mozilla/5.0'})
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         html = response.text
@@ -115,12 +115,9 @@ def obtener_episodios(url_serie):
 def buscar_serie(nombre_serie):
     """Busca una serie en AnimeFLV y devuelve los resultados."""
     url_busqueda = f"https://www3.animeflv.net/browse?q={nombre_serie.replace(' ', '%20')}"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
-    }
     try:
         logger.info(f"Realizando solicitud GET a {url_busqueda}")
-        response = requests.get(url_busqueda, headers=headers)
+        response = requests.get(url_busqueda, headers={'User-Agent': 'Mozilla/5.0'})
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -146,12 +143,10 @@ def buscar_serie(nombre_serie):
 def obtener_ultimos_animes():
     """Obtiene los últimos animes de AnimeFLV."""
     url_ultimos_animes = "https://www3.animeflv.net"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
-    }
+  
     try:
         logger.info(f"Realizando solicitud GET a {url_ultimos_animes}")
-        response = requests.get(url_ultimos_animes, headers=headers)
+        response = requests.get(url_ultimos_animes,headers={'User-Agent': 'Mozilla/5.0'})
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -191,7 +186,7 @@ def obtener_imagen_y_descripcion(url_serie):
     url_serie = re.sub(r'-\d+$', '', url_serie)  # Eliminar el número final de la URL
     try:
         logger.info(f"Realizando solicitud GET a {url_serie}")
-        response = requests.get(url_serie)
+        response = requests.get(url_serie,headers={'User-Agent': 'Mozilla/5.0'})
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.text, 'html.parser')
