@@ -147,11 +147,14 @@ def obtener_ultimos_animes():
                 enlace = item.find('a', href=True)
                 titulo = item.find('strong', class_='Title')
                 episodio = item.find('span', class_='Capi')
+                portada = item.find('span', class_='Image')
+                img_tag = portada.find('img')
                 if enlace and titulo and episodio:
                     animes.append({
                         'titulo': titulo.text.strip(),
                         'enlace': 'https://www3.animeflv.net' + enlace['href'],
-                        'episodio': episodio.text.strip()
+                        'episodio': episodio.text.strip(),
+                        'portada':'https://www3.animeflv.net' + img_tag['src']
                     })
                 else:
                     logger.warning(f"Elemento faltante en uno de los ítems: {item}")
