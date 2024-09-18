@@ -5,12 +5,22 @@ import json
 import re
 import logging
 from requests_html import HTMLSession
+from flask_cors import CORS  # <-- Importa flask-cors
+import unicodedata
 
 app = Flask(__name__)
+CORS(app)
 
 # Configuración de logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+
+def quitar_acentos(texto):
+    """Elimina los acentos de un texto."""
+    texto_normalizado = unicodedata.normalize('NFD', texto)
+    texto_sin_acentos = ''.join(char for char in texto_normalizado if unicodedata.category(char) != 'Mn')
+    return texto_sin_acentos
 
 def extraer_datos_de_script(html):
     """Extrae la información de los episodios del script JavaScript en el HTML."""
@@ -29,6 +39,131 @@ def extraer_datos_de_script(html):
         logger.error("Error al decodificar los datos JSON del script de episodios.")
         return []
     return episodes
+
+import requests
+from bs4 import BeautifulSoup
+import logging
+
+# Configura el logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+def obtener_recién_añadidos():
+    """Obtiene los animes más recientes de AnimeFLV según la fecha de adición."""
+    url_recien_anadidos = "https://www3.animeflv.net/browse?order=updated"
+
+    try:
+        logger.info(f"Realizando solicitud GET a {url_recien_anadidos}")
+        response = requests.get(url_recien_anadidos, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
+        logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
+        soup = BeautifulSoup(response.text, 'html.parser')
+        logger.info("Buscando la lista de animes recientes en la página")
+        lista_animes = soup.find('ul', class_='ListAnimes AX Rows A03 C02 D02')
+        if not lista_animes:
+            logger.warning("No se encontró la lista de animes recientes")
+            return []
+        recientes = []
+        for item in lista_animes.find_all('li'):
+            try:
+                imagen_div = item.find('div', class_='Image')
+                titulo_h3 = item.find('h3', class_='Title')
+                descripcion_div = item.find('div', class_='Description')
+                
+                # Selecciona los elementos necesarios
+                imagen_tag = imagen_div.find('img') if imagen_div else None
+                portada = imagen_tag['src'] if imagen_tag else 'N/A'
+                titulo = titulo_h3.text.strip() if titulo_h3 else 'N/A'
+                
+                # Extrae el segundo <p> para la descripción
+                descripcion_p_tags = descripcion_div.find_all('p') if descripcion_div else []
+                descripcion = descripcion_p_tags[1].text.strip() if len(descripcion_p_tags) > 1 else 'N/A'
+                
+                # Extrae la calificación
+                calificacion_span = descripcion_div.find('span', class_='Vts fa-star')
+                calificacion = calificacion_span.text.strip() if calificacion_span else 'N/A'
+                
+               # Extrae el tipo y seguidores
+                tipo_span = descripcion_div.find('span', class_='Type') if descripcion_div else None
+                tipo = tipo_span.text.strip() if tipo_span else 'N/A'
+
+                # Elimina acentos del tipo
+                tipo = quitar_acentos(tipo)
+
+                # Obtener el href del enlace
+                enlace = item.find('a')['href']
+                # Extraer el ID del anime del href, quitando el prefijo "/anime/"
+                id_anime = enlace.replace('/anime/', '').strip()
+                    
+
+                recientes.append({
+                    'id': id_anime,
+                    'titulo': titulo,
+                    'portada': portada,
+                    'calificacion': calificacion,
+                    'descripcion': descripcion,
+                    'tipo': tipo,
+                })
+            except Exception as e:
+                logger.error(f"Error al procesar un elemento reciente: {e}")
+        logger.info(f"Animes recientes encontrados: {len(recientes)}")
+        return recientes
+    except requests.RequestException as e:
+        logger.error(f"Error en la solicitud HTTP: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Error inesperado: {e}")
+        return []
+
+
+def obtener_populares():
+    """Obtiene los animes más populares de AnimeFLV según la clasificación."""
+    url_populares = "https://www3.animeflv.net/browse?order=rating"
+  
+    try:
+        logger.info(f"Realizando solicitud GET a {url_populares}")
+        response = requests.get(url_populares, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
+        logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
+        soup = BeautifulSoup(response.text, 'html.parser')
+        logger.info("Buscando la lista de animes populares en la página")
+        lista_animes = soup.find('ul', class_='ListAnimes AX Rows A03 C02 D02')
+        if not lista_animes:
+            logger.warning("No se encontró la lista de animes populares")
+            return []
+        populares = []
+        for item in lista_animes.find_all('li'):
+            try:
+                imagen_div = item.find('div', class_='Image')
+                titulo_h3 = item.find('h3', class_='Title')
+                calificacion_span = item.find('span', class_='Vts fa-star')
+                
+                if imagen_div and titulo_h3 and calificacion_span:
+                    imagen_tag = imagen_div.find('img')
+                    portada = imagen_tag['src']
+                    titulo = titulo_h3.text.strip()
+                    calificacion = calificacion_span.text.strip()
+                     # Obtener el href del enlace
+                    enlace = item.find('a')['href']
+                    # Extraer el ID del anime del href, quitando el prefijo "/anime/"
+                    id_anime = enlace.replace('/anime/', '').strip()
+                    
+                    populares.append({
+                        'id': id_anime,
+                        'titulo': titulo,
+                        'portada': portada,
+                        'calificacion': calificacion  # Agregar calificación
+                    })
+            except Exception as e:
+                logger.error(f"Error al procesar un elemento popular: {e}")
+        logger.info(f"Animes populares encontrados: {len(populares)}")
+        return populares
+    except requests.RequestException as e:
+        logger.error(f"Error en la solicitud HTTP: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Error inesperado: {e}")
+        return []
 
 def obtener_nombre_serie(url_serie):
     """Extrae el nombre de la serie desde la URL sin modificar."""
@@ -241,6 +376,16 @@ def api_obtener_imagen_y_descripcion():
         return jsonify({'imagen_url': imagen_url, 'descripcion': descripcion})
     else:
         return jsonify({'error': 'No se pudo obtener la imagen o descripción.'}), 404
+
+@app.route('/api/getPopulares', methods=['GET'])
+def api_obtener_populares():
+    populares = obtener_populares()
+    return jsonify(populares)
+
+@app.route('/api/getRecienAnadidos', methods=['GET'])
+def api_obtener_recién_añadidos():
+    recientes = obtener_recién_añadidos()
+    return jsonify(recientes)
 
 @app.route('/api/test', methods=['GET'])
 def test():
