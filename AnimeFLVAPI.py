@@ -5,8 +5,9 @@ import json
 import re
 import logging
 from requests_html import HTMLSession
-from flask_cors import CORS  # <-- Importa flask-cors
+from flask_cors import CORS  
 import unicodedata
+from cachetools import TTLCache
 
 app = Flask(__name__)
 CORS(app)
@@ -15,6 +16,12 @@ CORS(app)
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36',
+    'Referer': 'https://www.google.com/'
+}
+
+cache = TTLCache(maxsize=1000, ttl=86400)
 
 def quitar_acentos(texto):
     """Elimina los acentos de un texto."""
@@ -54,7 +61,7 @@ def obtener_recién_añadidos():
 
     try:
         logger.info(f"Realizando solicitud GET a {url_recien_anadidos}")
-        response = requests.get(url_recien_anadidos, headers={'User-Agent': 'Mozilla/5.0'})
+        response = requests.get(url_recien_anadidos, headers=headers)
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -122,7 +129,7 @@ def obtener_populares():
   
     try:
         logger.info(f"Realizando solicitud GET a {url_populares}")
-        response = requests.get(url_populares, headers={'User-Agent': 'Mozilla/5.0'})
+        response = requests.get(url_populares, headers=headers)
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -176,69 +183,128 @@ def obtener_nombre_serie(url_serie):
 
 def obtener_videos(url_episodio):
     """Extrae la información del video disponible para un episodio desde el script JavaScript."""
-    response = requests.get(url_episodio)
-    if response.status_code != 200:
-        return []
-    soup = BeautifulSoup(response.text, 'html.parser')
-    script = soup.find('script', string=lambda t: t and 'var videos = ' in t)
-    if not script:
-        return []
-    script_content = script.string
-    start_index = script_content.find('var videos = ') + len('var videos = ')
-    end_index = script_content.find(';', start_index)
-    videos_data = script_content[start_index:end_index].strip()
+    
+    # Revisamos si el episodio ya está en la caché
+    if url_episodio in cache:
+        logger.info(f"Obteniendo datos cacheados para el episodio {url_episodio}")
+        return cache[url_episodio]
+    
     try:
-        videos = json.loads(videos_data)
-    except json.JSONDecodeError:
-        return []
-    video_info = []
-    for video_type, video_list in videos.items():
-        for video in video_list:
-            video_info.append({
-                'titulo': video.get('title', 'No disponible'),
-                'url': video.get('url', ''),
-                'server': video.get('server', ''),
-                'code': video.get('code', '')
-            })
-    return video_info
+        # Añadimos el timeout de 1 segundo a la solicitud
+        response = requests.get(url_episodio, timeout=1, headers=headers)
+        if response.status_code != 200:
+            logger.warning(f"Error al obtener el episodio {url_episodio}: {response.status_code}")
+            return []
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        script = soup.find('script', string=lambda t: t and 'var videos = ' in t)
+        if not script:
+            logger.warning(f"No se encontró el script de videos en {url_episodio}")
+            return []
 
-def obtener_episodios(url_serie):
-    """Obtiene todos los episodios disponibles para la serie."""
+        # Extraer la parte del script que contiene la información de videos
+        script_content = script.string
+        start_index = script_content.find('var videos = ') + len('var videos = ')
+        end_index = script_content.find(';', start_index)
+        videos_data = script_content[start_index:end_index].strip()
+
+        # Convertir los datos de videos a un objeto JSON
+        videos = json.loads(videos_data)
+
+        # Recopilar información de los videos
+        video_info = []
+        for video_type, video_list in videos.items():
+            for video in video_list:
+                video_info.append({
+                    'titulo': video.get('title', 'No disponible'),
+                    'url': video.get('url', ''),
+                    'server': video.get('server', ''),
+                    'code': video.get('code', '')
+                })
+
+        # Guardar el resultado en la caché
+        cache[url_episodio] = video_info
+
+        return video_info
+    except requests.RequestException as e:
+        logger.error(f"Error en la solicitud HTTP para el episodio {url_episodio}: {e}")
+        return []
+    except json.JSONDecodeError:
+        logger.error(f"Error al decodificar JSON en {url_episodio}")
+        return []
+
+def obtener_episodios(url_serie, pagina=0, limite=12):
+    """Obtiene los episodios disponibles para la serie y su información de videos con paginación."""
     url_serie = url_serie.replace('/ver/', '/anime/')
     url_serie = re.sub(r'-\d+$', '', url_serie)  # Eliminar el número final de la URL
+
+    # Revisamos si la serie ya está en la caché
+    if url_serie in cache:
+        logger.info(f"Obteniendo episodios cacheados para la serie {url_serie}")
+        episodios_cache = cache[url_serie]
+        # Implementar la paginación en los episodios cacheados
+        episodios_paginados = episodios_cache[pagina * limite:(pagina + 1) * limite]
+        return episodios_paginados
+
     try:
+        # Añadimos el timeout de 1 segundo a la solicitud
         logger.info(f"Realizando solicitud GET a {url_serie}")
-        response = requests.get(url_serie,headers={'User-Agent': 'Mozilla/5.0'})
+        response = requests.get(url_serie, headers=headers, timeout=1)
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         html = response.text
+
+        # Extraer los datos de los episodios desde el script
         episodios_data = extraer_datos_de_script(html)
         if not episodios_data:
-            logger.warning("No se encontraron datos de episodios.")
+            logger.warning(f"No se encontraron datos de episodios en {url_serie}")
             return []
+
+        # Obtener el nombre de la serie
         nombre_serie = obtener_nombre_serie(url_serie)
         if not nombre_serie:
-            logger.warning("No se pudo extraer el nombre de la serie.")
+            logger.warning(f"No se pudo extraer el nombre de la serie en {url_serie}")
             return []
+
         episodios = []
         for episodio_num, episodio_id in episodios_data:
-            url = f'https://www3.animeflv.net/ver/{nombre_serie}-{episodio_num}'
-            episodios.append({'enlace': url, 'episodio': f"Episodio {episodio_num}"})
+            if len(episodios) >= limite * (pagina + 1):
+                # Si ya tenemos suficientes episodios para la página actual, dejamos de buscar más
+                break
+
+            url_episodio = f'https://www3.animeflv.net/ver/{nombre_serie}-{episodio_num}'
+            # Llamar a la función obtener_videos para obtener los enlaces de videos
+            if len(episodios) >= pagina * limite:  # Solo buscamos videos para los episodios de la página actual
+                videos = obtener_videos(url_episodio)
+                episodios.append({
+                    'enlace': url_episodio,
+                    'episodio': f"Episodio {episodio_num}",
+                    'videos': videos  # Incluir la información de los videos para cada episodio
+                })
+
+        # Ordenar episodios por número
         episodios.sort(key=lambda x: int(re.search(r'(\d+)$', x['episodio']).group(1)))
-        return episodios
+
+        # Guardar la lista de episodios en la caché
+        cache[url_serie] = episodios
+
+        # Devolver los episodios paginados
+        episodios_paginados = episodios[pagina * limite:(pagina + 1) * limite]
+        return episodios_paginados
+
     except requests.RequestException as e:
         logger.error(f"Error en la solicitud HTTP: {e}")
         return []
     except Exception as e:
         logger.error(f"Error inesperado: {e}")
         return []
-
+    
 def buscar_serie(nombre_serie):
     """Busca una serie en AnimeFLV y devuelve los resultados."""
     url_busqueda = f"https://www3.animeflv.net/browse?q={nombre_serie.replace(' ', '%20')}"
     try:
         logger.info(f"Realizando solicitud GET a {url_busqueda}")
-        response = requests.get(url_busqueda, headers={'User-Agent': 'Mozilla/5.0'})
+        response = requests.get(url_busqueda, headers=headers)
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -267,7 +333,7 @@ def obtener_ultimos_animes():
   
     try:
         logger.info(f"Realizando solicitud GET a {url_ultimos_animes}")
-        response = requests.get(url_ultimos_animes,headers={'User-Agent': 'Mozilla/5.0'})
+        response = requests.get(url_ultimos_animes,headers=headers)
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -316,7 +382,7 @@ def obtener_imagen_y_descripcion(url_serie):
     url_serie = re.sub(r'-\d+$', '', url_serie)  # Eliminar el número final de la URL
     try:
         logger.info(f"Realizando solicitud GET a {url_serie}")
-        response = requests.get(url_serie,headers={'User-Agent': 'Mozilla/5.0'})
+        response = requests.get(url_serie,headers=headers)
         response.raise_for_status()
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -336,6 +402,93 @@ def obtener_imagen_y_descripcion(url_serie):
     except Exception as e:
         logger.error(f"Error inesperado: {e}")
         return None, None
+def normalizar_texto(texto):
+    # Normalizar el texto eliminando acentos y caracteres especiales
+    texto = ''.join(
+        c for c in unicodedata.normalize('NFKD', texto)
+        if unicodedata.category(c) != 'Mn'
+    )
+    # Eliminar las comillas dobles, comillas simples
+    texto = texto.replace('"', '').replace("'", "")
+
+    # Reemplazar caracteres unicode especiales
+    texto = texto.replace('\u00a1', '').replace('\u00bf', '').replace('\u2026', '')
+
+    # Eliminar saltos de línea y espacios extra
+    texto = texto.replace("\r\n", " ").replace("\n", " ").strip()
+
+    # Eliminar espacios adicionales
+    return ' '.join(texto.split())
+
+# Función para obtener los datos del anime desde AnimeFLV
+def obtener_anime_perfil(nombre_anime):
+    """Busca un anime en AnimeFLV y devuelve los datos del perfil."""
+    nombre_anime = normalizar_texto(nombre_anime)  # Normalizar nombre de la serie
+    url = f"https://www3.animeflv.net/anime/{nombre_anime}"
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        # Parsear el contenido HTML con BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Extraer el título
+        titulo_h1 = soup.find('h1', class_='Title')
+        titulo = normalizar_texto(titulo_h1.text) if titulo_h1 else "Titulo no encontrado"
+
+        # Extraer la imagen del póster
+        poster_div = soup.find('div', class_='AnimeCover').find('img')
+        poster_url = "https://www3.animeflv.net" + poster_div['src'] if poster_div else None
+
+        # Extraer los géneros
+        generos = []
+        nav_genres = soup.find('nav', class_='Nvgnrs')
+        if nav_genres:
+            generos = [normalizar_texto(a.text) for a in nav_genres.find_all('a')]
+
+        # Extraer la sinopsis
+        sinopsis_div = soup.find('div', class_='Description')
+        sinopsis = normalizar_texto(sinopsis_div.find('p').text) if sinopsis_div else None
+
+        # Extraer la calificación
+        votos_div = soup.find('div', class_='Votes')
+        calificacion = votos_div.find('span', id='votes_prmd').text if votos_div else "Calificacion no disponible"
+        votos_totales = votos_div.find('span', id='votes_nmbr').text if votos_div else "Votos no disponibles"
+
+
+        # Armar la respuesta
+        anime_data = {
+            'id': nombre_anime,
+            'titulo': titulo,
+            'poster': poster_url,
+            'generos': generos,
+            'descripcion': sinopsis,
+            'calificacion': calificacion,
+            'votos_totales': votos_totales
+        }
+
+        return anime_data
+
+    except requests.RequestException as e:
+        return {'error': f"Error en la solicitud HTTP: {str(e)}"}
+    except Exception as e:
+        return {'error': f"Error inesperado: {str(e)}"}
+
+@app.route('/api/getAnimePerfil', methods=['GET'])
+def api_get_anime_perfil():
+    nombre_anime = request.args.get('anime')
+    
+    if not nombre_anime:
+        return jsonify({'error': 'El parámetro "anime" es obligatorio.'}), 400
+
+    anime_perfil = obtener_anime_perfil(nombre_anime)
+    
+    if 'error' in anime_perfil:
+        return jsonify(anime_perfil), 500
+    
+    return jsonify(anime_perfil)
+
 
 @app.route('/api/getAnime', methods=['GET'])
 def api_buscar_serie():
@@ -350,7 +503,12 @@ def api_obtener_episodios():
     url_serie = request.args.get('url_serie')
     if not url_serie:
         return jsonify({'error': 'El parámetro "url_serie" es obligatorio.'}), 400
-    episodios = obtener_episodios(url_serie)
+
+    # Obtiene los parámetros de paginación
+    pagina = request.args.get('pagina', default=0, type=int)  # Página por defecto es 0
+    limite = request.args.get('limite', default=12, type=int)  # Límite por defecto es 12
+
+    episodios = obtener_episodios(url_serie, pagina=pagina, limite=limite)
     return jsonify(episodios)
 
 @app.route('/api/videos', methods=['GET'])
