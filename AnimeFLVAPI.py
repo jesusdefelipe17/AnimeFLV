@@ -10,7 +10,7 @@ import unicodedata
 from cachetools import TTLCache
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})  # Permitir cualquier origen
 
 # Configuración de logging
 logging.basicConfig(level=logging.DEBUG)
