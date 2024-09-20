@@ -17,8 +17,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36',
-    'Referer': 'https://www.google.com/'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 }
 
 cache = TTLCache(maxsize=1000, ttl=86400)
