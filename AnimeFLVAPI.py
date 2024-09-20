@@ -29,6 +29,17 @@ def quitar_acentos(texto):
     texto_sin_acentos = ''.join(char for char in texto_normalizado if unicodedata.category(char) != 'Mn')
     return texto_sin_acentos
 
+def quitar_acentos_y_caracteres_raros(texto):
+    """Elimina los acentos, comillas y caracteres especiales de un texto."""
+    # Normalizar texto para eliminar acentos
+    texto_normalizado = unicodedata.normalize('NFD', texto)
+    texto_sin_acentos = ''.join(char for char in texto_normalizado if unicodedata.category(char) != 'Mn')
+    
+    # Eliminar caracteres no alfanuméricos (excepto espacios)
+    texto_limpio = re.sub(r'[^a-zA-Z0-9\s]', '', texto_sin_acentos)
+    
+    return texto_limpio
+
 def extraer_datos_de_script(html):
     """Extrae la información de los episodios del script JavaScript en el HTML."""
     soup = BeautifulSoup(html, 'html.parser')
@@ -239,13 +250,12 @@ def obtener_episodios(url_serie, pagina=0, limite=12):
     url_serie = re.sub(r'-\d+$', '', url_serie)  # Eliminar el número final de la URL
 
     # Revisamos si la serie ya está en la caché
-    if url_serie in cache:
-        logger.info(f"Obteniendo episodios cacheados para la serie {url_serie}")
-        episodios_cache = cache[url_serie]
-        # Implementar la paginación en los episodios cacheados
-        episodios_paginados = episodios_cache[pagina * limite:(pagina + 1) * limite]
-        return episodios_paginados
-
+    clave_cache = f"{url_serie}_pagina_{pagina}"
+    if clave_cache in cache:
+        logger.info(f"Obteniendo episodios cacheados para la serie {url_serie}, página {pagina}")
+        return cache[clave_cache]
+    
+    # Si la página solicitada no está en la caché, seguimos buscando episodios
     try:
         # Añadimos el timeout de 1 segundo a la solicitud
         logger.info(f"Realizando solicitud GET a {url_serie}")
@@ -266,31 +276,30 @@ def obtener_episodios(url_serie, pagina=0, limite=12):
             logger.warning(f"No se pudo extraer el nombre de la serie en {url_serie}")
             return []
 
-        episodios = []
-        for episodio_num, episodio_id in episodios_data:
-            if len(episodios) >= limite * (pagina + 1):
-                # Si ya tenemos suficientes episodios para la página actual, dejamos de buscar más
-                break
+        episodios = []  # Para almacenar los episodios obtenidos en esta página
+        # Calcular el rango de episodios que necesitamos para esta página
+        inicio = pagina * limite
+        fin = inicio + limite
 
+        for i, (episodio_num, episodio_id) in enumerate(episodios_data[inicio:fin], start=inicio):
+            # Construir la URL del episodio
             url_episodio = f'https://www3.animeflv.net/ver/{nombre_serie}-{episodio_num}'
+            
             # Llamar a la función obtener_videos para obtener los enlaces de videos
-            if len(episodios) >= pagina * limite:  # Solo buscamos videos para los episodios de la página actual
-                videos = obtener_videos(url_episodio)
-                episodios.append({
-                    'enlace': url_episodio,
-                    'episodio': f"Episodio {episodio_num}",
-                    'videos': videos  # Incluir la información de los videos para cada episodio
-                })
+            videos = obtener_videos(url_episodio)
+            episodios.append({
+                'enlace': url_episodio,
+                'episodio': f"Episodio {episodio_num}",
+                'videos': videos  # Incluir la información de los videos para cada episodio
+            })
 
-        # Ordenar episodios por número
-        episodios.sort(key=lambda x: int(re.search(r'(\d+)$', x['episodio']).group(1)))
+        # Guardar la lista de episodios de esta página en la caché
+        cache[clave_cache] = episodios
 
-        # Guardar la lista de episodios en la caché
-        cache[url_serie] = episodios
+        # Mantener un registro global de todos los episodios cacheados para esta serie
+        cache[f"{url_serie}_all_episodes"] = cache.get(f"{url_serie}_all_episodes", []) + episodios
 
-        # Devolver los episodios paginados
-        episodios_paginados = episodios[pagina * limite:(pagina + 1) * limite]
-        return episodios_paginados
+        return episodios
 
     except requests.RequestException as e:
         logger.error(f"Error en la solicitud HTTP: {e}")
@@ -298,9 +307,9 @@ def obtener_episodios(url_serie, pagina=0, limite=12):
     except Exception as e:
         logger.error(f"Error inesperado: {e}")
         return []
-    
+
 def buscar_serie(nombre_serie):
-    """Busca una serie en AnimeFLV y devuelve los resultados."""
+    """Busca una serie en AnimeFLV y devuelve los resultados con póster, tipo, puntuación, descripción e id."""
     url_busqueda = f"https://www3.animeflv.net/browse?q={nombre_serie.replace(' ', '%20')}"
     try:
         logger.info(f"Realizando solicitud GET a {url_busqueda}")
@@ -309,17 +318,53 @@ def buscar_serie(nombre_serie):
         logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.content, 'html.parser')
         resultados = soup.find('ul', class_='ListAnimes AX Rows A03 C02 D02')
+        
         if not resultados:
             logger.warning("No se encontraron resultados de búsqueda.")
             return []
+        
         series = []
         for resultado in resultados.find_all('li'):
+            # Extraer el enlace a la serie
             enlace = resultado.find('a', href=True)
             titulo = resultado.find('h3', class_='Title')
-            if enlace and titulo:
+            poster_img = resultado.find('figure').find('img')  # Extraer el póster (imagen)
+            descripcion_div = resultado.find('div', class_='Description')  # Extraer la descripción completa
+            
+            # Asegurarse de que todos los elementos existen
+            if enlace and titulo and poster_img and descripcion_div:
                 url = 'https://www3.animeflv.net' + enlace['href']
-                series.append({'titulo': titulo.text.strip(), 'url': url})
+                poster_url = poster_img['src']
+                
+                # Extraer tipo, puntuación y descripción
+                tipo_span = descripcion_div.find('span', class_='Type')
+                puntuacion_span = descripcion_div.find('span', class_='Vts')
+                descripcion_p = descripcion_div.find_all('p')[1]  # El segundo <p> contiene la descripción
+                
+                # Asegurarse de que todos los elementos existen
+                tipo = tipo_span.text.strip() if tipo_span else 'Desconocido'
+                puntuacion = puntuacion_span.text.strip() if puntuacion_span else 'N/A'
+                descripcion = descripcion_p.text.strip() if descripcion_p else 'Sin descripción disponible'
+                
+                tipo = quitar_acentos_y_caracteres_raros(tipo)
+                descripcion = quitar_acentos_y_caracteres_raros(descripcion)
+
+                # Extraer el id (lo que viene después del último '/')
+                id_serie = url.split('/')[-1]
+                
+                # Agregar los datos extraídos a la lista
+                series.append({
+                    'titulo': titulo.text.strip(),
+                    'url': url,
+                    'poster': poster_url,
+                    'tipo': tipo,
+                    'puntuacion': puntuacion,
+                    'descripcion': descripcion,
+                    'id': id_serie
+                })
+        
         return series
+
     except requests.RequestException as e:
         logger.error(f"Error en la solicitud HTTP: {e}")
         return []
