@@ -523,6 +523,79 @@ def obtener_anime_perfil(nombre_anime):
     except Exception as e:
         return {'error': f"Error inesperado: {str(e)}"}
 
+def obtener_animes_por_genero(generos):
+    """
+    Obtiene animes de AnimeFLV según los géneros proporcionados.
+    
+    Args:
+        generos (list): Lista de géneros para buscar animes.
+        
+    Returns:
+        list: Lista de animes que coinciden con los géneros.
+    """
+    # Base URL para la búsqueda
+    base_url = "https://www3.animeflv.net/browse?"
+    
+    # Construir la URL con los géneros
+    genero_query = "&".join([f"genre%5B%5D={genero}" for genero in generos])
+    url_busqueda = f"{base_url}{genero_query}&order=rating"
+
+    try:
+        # Realizar la solicitud GET a la URL construida
+        response = requests.get(url_busqueda, headers=headers)
+        response.raise_for_status()
+        
+        # Parsear el contenido HTML con BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Buscar la lista de animes en la página
+        lista_animes = soup.find('ul', class_='ListAnimes AX Rows A03 C02 D02')
+        if not lista_animes:
+            return []
+
+        animes = []
+        for item in lista_animes.find_all('li'):
+            try:
+                imagen_div = item.find('div', class_='Image')
+                titulo_h3 = item.find('h3', class_='Title')
+                enlace = item.find('a')['href']
+                id_anime = enlace.replace('/anime/', '').strip()
+                calificacion_span = item.find('span', class_='Vts fa-star')
+                
+                if imagen_div and titulo_h3 and calificacion_span:
+                    imagen_tag = imagen_div.find('img')
+                    portada = imagen_tag['src']
+                    titulo = titulo_h3.text.strip()
+                    calificacion = calificacion_span.text.strip()
+                    
+                    animes.append({
+                        'id': id_anime,
+                        'titulo': titulo,
+                        'portada': portada,
+                        'calificacion': calificacion
+                    })
+            except Exception as e:
+                # Loguear cualquier error durante el procesamiento de los animes
+                print(f"Error al procesar un anime: {e}")
+        
+        return animes
+
+    except requests.RequestException as e:
+        print(f"Error en la solicitud HTTP: {e}")
+        return []
+
+@app.route('/api/getAnimesByGenre', methods=['GET'])
+def api_obtener_animes_por_genero():
+    """
+    API para obtener animes según uno o varios géneros.
+    """
+    generos = request.args.getlist('genre')
+    if not generos:
+        return jsonify({'error': 'El parámetro "genre" es obligatorio.'}), 400
+    
+    animes = obtener_animes_por_genero(generos)
+    return jsonify(animes)
+
 @app.route('/api/getAnimePerfil', methods=['GET'])
 def api_get_anime_perfil():
     nombre_anime = request.args.get('anime')
