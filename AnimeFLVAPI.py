@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -8,6 +8,7 @@ from requests_html import HTMLSession
 from flask_cors import CORS  
 import unicodedata
 from cachetools import TTLCache
+import sqlite3
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Permitir cualquier origen
@@ -25,6 +26,79 @@ headers = {
 
 
 cache = TTLCache(maxsize=1000, ttl=86400)
+
+# Función para obtener la conexión a la base de datos
+def get_db():
+    if 'db' not in g:
+        g.db = sqlite3.connect('anime.db')
+    return g.db
+
+# Cerrar la conexión a la base de datos al final de la solicitud@app.teardown_appcontext
+def close_db(error):
+    if hasattr(g, 'db'):
+        db = g.pop('db', None)
+        if db is not None:
+            db.close()
+
+# Crear la tabla si no existe (esto lo puedes hacer al iniciar la app)
+with sqlite3.connect('anime.db') as conn:
+    cursor = conn.cursor()
+
+    # Crear la tabla 'series' si no existe
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS series (
+        id TEXT PRIMARY KEY,
+        titulo TEXT,
+        url TEXT,
+        poster TEXT,
+        tipo TEXT,
+        puntuacion TEXT,
+        descripcion TEXT
+    )
+    ''')
+
+    # Crear la tabla 'episodios' si no existe
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS episodios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        serie_id TEXT,
+        numero TEXT,
+        url TEXT,
+        videos TEXT,
+        FOREIGN KEY (serie_id) REFERENCES series(id)
+    )
+    ''')
+
+    # Confirmar los cambios en la base de datos
+    conn.commit()
+
+def guardar_serie_en_bbdd(serie_data):
+    """Guarda los datos de una serie en la base de datos."""
+    try:
+        db = get_db()
+        cursor = db.cursor()
+
+        id_serie = serie_data.get('id')
+        titulo = serie_data.get('titulo')
+        url = serie_data.get('url')
+        poster = serie_data.get('poster')
+        tipo = serie_data.get('tipo')
+        puntuacion = serie_data.get('puntuacion')
+        descripcion = serie_data.get('descripcion')
+
+        # Insertar los datos en la base de datos
+        cursor.execute('''
+            INSERT OR REPLACE INTO series (id, titulo, url, poster, tipo, puntuacion, descripcion)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (id_serie, titulo, url, poster, tipo, puntuacion, descripcion))
+
+        # Guardar los cambios
+        db.commit()
+
+        print(f"Datos de la serie '{titulo}' guardados correctamente.")
+
+    except sqlite3.Error as e:
+        print(f"Error al guardar los datos en la base de datos: {str(e)}")
 
 def quitar_acentos(texto):
     """Elimina los acentos de un texto."""
@@ -247,18 +321,74 @@ def obtener_videos(url_episodio):
         logger.error(f"Error al decodificar JSON en {url_episodio}")
         return []
 
+def guardar_episodio_en_bbdd(serie_id, numero, url, videos):
+    """Guarda un episodio en la base de datos."""
+    db = get_db()
+    cursor = db.cursor()
+    
+    # Insertar el episodio en la tabla episodios
+    cursor.execute("""
+        INSERT INTO episodios (serie_id, numero, url, videos) 
+        VALUES (?, ?, ?, ?)
+    """, (serie_id, numero, url, json.dumps(videos)))  # Guardar los videos como JSON
+    
+    db.commit()
+
+def actualizar_episodio_en_bbdd(serie_id, numero, videos):
+    """Actualiza los videos de un episodio en la base de datos."""
+    db = get_db()
+    cursor = db.cursor()
+    
+    # Actualizar los videos en la tabla episodios
+    cursor.execute(""" 
+        UPDATE episodios 
+        SET videos = ? 
+        WHERE serie_id = ? AND numero = ?
+    """, (json.dumps(videos), serie_id, numero))
+    
+    db.commit()
+
 def obtener_episodios(url_serie, pagina=0, limite=12):
     """Obtiene los episodios disponibles para la serie y su información de videos con paginación."""
     url_serie = url_serie.replace('/ver/', '/anime/')
     url_serie = re.sub(r'-\d+$', '', url_serie)  # Eliminar el número final de la URL
 
-    # Revisamos si la serie ya está en la caché
-    clave_cache = f"{url_serie}_pagina_{pagina}"
-    if clave_cache in cache:
-        logger.info(f"Obteniendo episodios cacheados para la serie {url_serie}, página {pagina}")
-        return cache[clave_cache]
-    
-    # Si la página solicitada no está en la caché, seguimos buscando episodios
+    # Extraer el `serie_id` del final de la URL
+    serie_id = url_serie.split('/')[-1]
+
+    # Conectar a la base de datos
+    with sqlite3.connect('anime.db') as conn:
+        cursor = conn.cursor()
+
+        # Consultar si ya existen episodios para la serie en la base de datos
+        cursor.execute('SELECT * FROM episodios WHERE serie_id = ? LIMIT ?, ?', (serie_id, pagina * limite, limite))
+        episodios_en_bbdd = cursor.fetchall()
+
+        episodios = []  # Para almacenar los episodios encontrados
+
+        if episodios_en_bbdd:
+            logger.info(f"Episodios encontrados en la base de datos para la serie {serie_id}, página {pagina}")
+            
+            for episodio in episodios_en_bbdd:
+                videos = episodio[4]  # Asumiendo que el campo de videos es el cuarto
+                episodio_num = episodio[2].split(' ')[-1]  # Extraer solo el número del episodio
+
+                if videos == '[]':  # Si el campo de videos es una lista vacía
+                    logger.info(f"Videos vacíos para el episodio {episodio_num}, recuperando de la web")
+                    # Recuperar datos desde la web
+                    url_episodio = f'https://www3.animeflv.net/ver/{serie_id}-{episodio_num}'
+                    videos = obtener_videos(url_episodio)
+                    
+                    # Actualizar la base de datos con los nuevos videos
+                    actualizar_episodio_en_bbdd(serie_id, f"Episodio {episodio_num}", videos)
+                else:
+                    logger.info(f"Videos ya disponibles para el episodio {episodio_num}")
+
+                episodios.append({'enlace': episodio[3], 'episodio': f"Episodio {episodio_num}", 'videos': videos})
+
+            return episodios
+
+    # Si no se encontraron episodios en la base de datos, hacemos la solicitud a la web
     try:
         # Añadimos el timeout de 1 segundo a la solicitud
         logger.info(f"Realizando solicitud GET a {url_serie}")
@@ -273,20 +403,13 @@ def obtener_episodios(url_serie, pagina=0, limite=12):
             logger.warning(f"No se encontraron datos de episodios en {url_serie}")
             return []
 
-        # Obtener el nombre de la serie
-        nombre_serie = obtener_nombre_serie(url_serie)
-        if not nombre_serie:
-            logger.warning(f"No se pudo extraer el nombre de la serie en {url_serie}")
-            return []
-
         episodios = []  # Para almacenar los episodios obtenidos en esta página
-        # Calcular el rango de episodios que necesitamos para esta página
         inicio = pagina * limite
         fin = inicio + limite
 
         for i, (episodio_num, episodio_id) in enumerate(episodios_data[inicio:fin], start=inicio):
             # Construir la URL del episodio
-            url_episodio = f'https://www3.animeflv.net/ver/{nombre_serie}-{episodio_num}'
+            url_episodio = f'https://www3.animeflv.net/ver/{serie_id}-{episodio_num}'
             
             # Llamar a la función obtener_videos para obtener los enlaces de videos
             videos = obtener_videos(url_episodio)
@@ -296,11 +419,8 @@ def obtener_episodios(url_serie, pagina=0, limite=12):
                 'videos': videos  # Incluir la información de los videos para cada episodio
             })
 
-        # Guardar la lista de episodios de esta página en la caché
-        cache[clave_cache] = episodios
-
-        # Mantener un registro global de todos los episodios cacheados para esta serie
-        cache[f"{url_serie}_all_episodes"] = cache.get(f"{url_serie}_all_episodes", []) + episodios
+            # Guardar los episodios en la base de datos
+            guardar_episodio_en_bbdd(serie_id, f"Episodio {episodio_num}", url_episodio, videos)
 
         return episodios
 
@@ -311,19 +431,53 @@ def obtener_episodios(url_serie, pagina=0, limite=12):
         logger.error(f"Error inesperado: {e}")
         return []
 
+
+def buscar_serie_en_bbdd(nombre_serie):
+    """Busca una serie en la base de datos por su título."""
+    db = get_db()
+    cursor = db.cursor()
+    query = "SELECT id, titulo, url, poster, tipo, puntuacion, descripcion FROM series WHERE titulo LIKE ?"
+    cursor.execute(query, (f"%{nombre_serie}%",))
+    rows = cursor.fetchall()
+
+    series = []
+    if rows:
+        for row in rows:
+            serie_data = {
+                'id': row[0],
+                'titulo': row[1],
+                'url': row[2],
+                'poster': row[3],
+                'tipo': row[4],
+                'puntuacion': row[5],
+                'descripcion': row[6],
+            }
+            series.append(serie_data)
+
+    return series
+
 def buscar_serie(nombre_serie):
-    """Busca una serie en AnimeFLV y devuelve los resultados con póster, tipo, puntuación, descripción e id."""
+    """Busca una serie en AnimeFLV y guarda los resultados en la base de datos."""
+    
+    # Primero, intentamos encontrar la serie en la base de datos
+    series_bbdd = buscar_serie_en_bbdd(nombre_serie)
+    
+    # Si encontramos la serie en la base de datos, la devolvemos directamente
+    if series_bbdd:
+        print(f"Serie '{nombre_serie}' encontrada en la base de datos.")
+        return series_bbdd
+    
+    # Si no encontramos la serie en la base de datos, hacemos la solicitud a AnimeFLV
+    print(f"Serie '{nombre_serie}' no encontrada en la base de datos. Realizando la búsqueda online.")
     url_busqueda = f"https://www3.animeflv.net/browse?q={nombre_serie.replace(' ', '%20')}"
+    
     try:
-        logger.info(f"Realizando solicitud GET a {url_busqueda}")
-        response = requests.get(url_busqueda, headers=headers)
+        response = requests.get(url_busqueda, headers={'User-Agent': 'Mozilla/5.0'})
         response.raise_for_status()
-        logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
         soup = BeautifulSoup(response.content, 'html.parser')
         resultados = soup.find('ul', class_='ListAnimes AX Rows A03 C02 D02')
         
         if not resultados:
-            logger.warning("No se encontraron resultados de búsqueda.")
             return []
         
         series = []
@@ -344,19 +498,15 @@ def buscar_serie(nombre_serie):
                 puntuacion_span = descripcion_div.find('span', class_='Vts')
                 descripcion_p = descripcion_div.find_all('p')[1]  # El segundo <p> contiene la descripción
                 
-                # Asegurarse de que todos los elementos existen
                 tipo = tipo_span.text.strip() if tipo_span else 'Desconocido'
                 puntuacion = puntuacion_span.text.strip() if puntuacion_span else 'N/A'
                 descripcion = descripcion_p.text.strip() if descripcion_p else 'Sin descripción disponible'
                 
-                tipo = quitar_acentos_y_caracteres_raros(tipo)
-                descripcion = quitar_acentos_y_caracteres_raros(descripcion)
-
                 # Extraer el id (lo que viene después del último '/')
                 id_serie = url.split('/')[-1]
                 
                 # Agregar los datos extraídos a la lista
-                series.append({
+                serie_data = {
                     'titulo': titulo.text.strip(),
                     'url': url,
                     'poster': poster_url,
@@ -364,16 +514,21 @@ def buscar_serie(nombre_serie):
                     'puntuacion': puntuacion,
                     'descripcion': descripcion,
                     'id': id_serie
-                })
+                }
+                
+                # Guardar la serie en la base de datos
+                guardar_serie_en_bbdd(serie_data)
+
+                # Añadir la serie a la lista de resultados
+                series.append(serie_data)
         
         return series
 
     except requests.RequestException as e:
-        logger.error(f"Error en la solicitud HTTP: {e}")
-        return []
+        return {'error': f"Error en la solicitud HTTP: {e}"}
     except Exception as e:
-        logger.error(f"Error inesperado: {e}")
-        return []
+        return {'error': f"Error inesperado: {e}"}
+
 
 def obtener_ultimos_animes():
     """Obtiene los últimos animes de AnimeFLV."""
