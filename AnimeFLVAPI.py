@@ -9,6 +9,7 @@ from flask_cors import CORS
 import unicodedata
 from cachetools import TTLCache
 import sqlite3
+import re
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Permitir cualquier origen
@@ -99,6 +100,8 @@ def guardar_serie_en_bbdd(serie_data):
 
     except sqlite3.Error as e:
         print(f"Error al guardar los datos en la base de datos: {str(e)}")
+
+
 
 def quitar_acentos(texto):
     """Elimina los acentos de un texto."""
@@ -738,6 +741,128 @@ def obtener_animes_por_genero(generos):
     except requests.RequestException as e:
         print(f"Error en la solicitud HTTP: {e}")
         return []
+    
+def obtener_mangas_populares():
+    """Obtiene los mangas más populares desde la página principal de espscans."""
+    url_mangas_populares = "https://www.espscans.com"
+    
+    try:
+        logger.info(f"Realizando solicitud GET a {url_mangas_populares}")
+        response = requests.get(url_mangas_populares, headers=headers)
+        response.raise_for_status()
+        logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Buscando la lista de mangas en el contenedor 'loop-content'
+        logger.info("Buscando la lista de mangas populares en la página")
+        lista_mangas = soup.find('div', id='loop-content')
+
+        if not lista_mangas:
+            logger.warning("No se encontró la lista de mangas populares")
+            return []
+
+        populares = []
+
+        # Recorriendo cada item de manga en la lista
+        for item in lista_mangas.find_all('div', class_='page-listing-item'):
+            # Ahora, busquemos todas las columnas dentro de cada fila
+            columnas = item.find_all('div', class_='col-12 col-md-6 badge-pos-1')
+            
+            for columna in columnas:
+                try:
+                    # Obteniendo el título, imagen (portada), enlace y calificación
+                    titulo_tag = columna.find('h3', class_='h5')
+                    calificacion_tag = columna.find('span', class_='score')
+                    enlace_tag = columna.find('a', href=True)
+
+                    # Extrayendo la portada desde el atributo 'data-src' o 'src'
+                    imagen_tag = columna.find('img')
+                    if imagen_tag:
+                        portada = imagen_tag.get('data-src', imagen_tag.get('src'))
+
+                    if titulo_tag and calificacion_tag and imagen_tag and enlace_tag:
+                        titulo = titulo_tag.text.strip()
+                        calificacion = calificacion_tag.text.strip()
+                        enlace = enlace_tag['href']
+
+                        # Extrayendo el ID del manga desde el enlace (última parte de la URL)
+                        id_manga = enlace.split('/')[-2] if enlace.endswith('/') else enlace.split('/')[-1]
+
+                        populares.append({
+                            'titulo': titulo,
+                            'portada': portada,
+                            'calificacion': calificacion,
+                            'enlace': enlace,
+                            'id': id_manga   # Agregamos el ID del manga
+                        })
+                except Exception as e:
+                    logger.error(f"Error al procesar un elemento de manga popular: {e}")
+        
+        logger.info(f"Mangas populares encontrados: {len(populares)}")
+        return populares
+
+    except requests.RequestException as e:
+        logger.error(f"Error en la solicitud HTTP: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Error inesperado: {e}")
+        return []
+    
+def obtener_manga_perfil(nombre_manga):
+    """Obtiene los detalles del perfil de un manga desde la página de espscans."""
+    url_manga = f"https://www.espscans.com/manga/{nombre_manga}/"
+    
+    try:
+        logger.info(f"Realizando solicitud GET a {url_manga}")
+        response = requests.get(url_manga)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Obtener el póster
+        poster_tag = soup.find('div', class_='summary_image').find('img')
+        poster = poster_tag.get('data-src', poster_tag.get('src')) if poster_tag else 'Sin imagen'
+
+        # Obtener título
+        titulo_tag = soup.find('span', property='name')
+        titulo = titulo_tag.text.strip() if titulo_tag else 'Desconocido'
+
+        # Generar el id con el título en minúsculas y reemplazar espacios por guiones
+        id_manga = titulo.lower().replace(" ", "-") if titulo else 'sin-id'
+
+        # Obtener calificación
+        calificacion_tag = soup.find('span', property='ratingValue')
+        calificacion = calificacion_tag.text.strip() if calificacion_tag else 'N/A'
+
+      
+        # Obtener géneros
+        generos_tag = soup.find('div', class_='genres-content')
+        generos = 'Ninguno'  # Valor predeterminado
+        if generos_tag:
+             generos = ', '.join([a.text.strip() for a in generos_tag.find_all('a')])
+               
+
+        # Obtener y limpiar descripción
+        descripcion_tag = soup.find('div', class_='description-summary').find('p')
+        descripcion = quitar_acentos(descripcion_tag.text.replace("\u00a0"," ").replace("\u200b"," ").replace("\u00b0"," ")) if descripcion_tag else 'Sin descripción'
+
+        descripcion_limpia = re.sub(r'\(.*?\)', '',descripcion)
+
+
+        # Devolver los datos en un diccionario, incluyendo el campo id
+        return {
+            'id': id_manga,
+            'titulo': titulo,
+            'poster': poster,
+            'calificacion': calificacion,
+            'generos': generos,
+            'descripcion': re.sub(r'\s+', ' ', descripcion_limpia).strip()
+        }
+
+    except Exception as e:
+        logger.error(f"Error al obtener el perfil del manga {nombre_manga}: {e}")
+        return {'error': f"No se pudo obtener el perfil del manga {nombre_manga}."}
+    
 
 @app.route('/api/getAnimesByGenre', methods=['GET'])
 def api_obtener_animes_por_genero():
@@ -824,6 +949,29 @@ def api_obtener_recién_añadidos():
 @app.route('/api/test', methods=['GET'])
 def test():
     return jsonify({'status': 'OK', 'message': 'API funcionando correctamente'})
+
+
+@app.route('/api/MangasPopulares', methods=['GET'])
+def api_obtener_mangas_populares():
+    mangas_populares = obtener_mangas_populares()
+    return jsonify(mangas_populares)
+
+
+@app.route('/api/getMangaPerfil', methods=['GET'])
+def api_get_manga_perfil():
+    nombre_manga = request.args.get('manga')
+    
+    if not nombre_manga:
+        return jsonify({'error': 'El parámetro "manga" es obligatorio.'}), 400
+
+    # Obtener datos del perfil del manga desde el scraping
+    manga_perfil = obtener_manga_perfil(nombre_manga)
+    
+    if 'error' in manga_perfil:
+        return jsonify(manga_perfil), 500
+    
+    return jsonify(manga_perfil)
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True)
