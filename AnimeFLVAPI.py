@@ -820,7 +820,7 @@ def obtener_manga_perfil(url_manga):
         soup = BeautifulSoup(response.text, 'html.parser')
 
         # Obtener el contenedor principal donde están el título y la descripción
-        contenedor_manga = soup.find('div', class_='col-md-9 col-sm-8 col-xs-12')
+        contenedor_manga = soup.select_one('div.col-md-9.col-sm-8.col-xs-12')
 
         if not contenedor_manga:
             print("No se encontró el contenedor del manga.")
@@ -884,10 +884,10 @@ def obtener_manga_perfil(url_manga):
         # La respuesta puede estar en un string, así que debemos volver a cargarla
         capitulos_json = json.loads(capitulos_data['data'])
 
-        for index, capitulo in enumerate(capitulos_json['result']):
+        for capitulo in capitulos_json['result']:
             # Solo recoger la identificación para la llamada de siguiente nivel
             identificacion = capitulo['Identification']
-            capitulos[index + 1] = {  # Utilizamos index + 1 como clave para empezar desde 1
+            capitulos[capitulo['FriendlyChapterNumberUrl']] = {  # Utilizamos index + 1 como clave para empezar desde 1
                 'chapter_id': identificacion
             }
            
@@ -919,7 +919,7 @@ def obtener_imagenes_manga(url_capitulo):
         response_capitulo_detalle = requests.get(url_capitulo_detalle)
         response_capitulo_detalle.raise_for_status()
 
-        # Extraer datos de los inputs hidden (aunque no los vamos a usar aquí)
+        # Extraer datos de los inputs hidden
         soup_detalle = BeautifulSoup(response_capitulo_detalle.text, 'html.parser')
         chapter_number = soup_detalle.find('input', {'id': 'ChapterNumber'})['value']
         friendly_manga_name = soup_detalle.find('input', {'id': 'FriendlyMangaName'})['value']
@@ -929,19 +929,20 @@ def obtener_imagenes_manga(url_capitulo):
         imagenes = []  # Lista para almacenar las URLs de las imágenes
 
         for pagina in paginas:
-            # Encuentra la etiqueta <img> dentro del <a> y extrae data-pagenumber y id
+            # Encuentra la URL de la página de imagen
             img_tag = pagina.find('img', class_='ImageContainer')
             if img_tag:
-                # Aquí puedes construir la URL utilizando data-pagenumber y el id del img_tag
+                # Construir la URL de la imagen
                 imagen_url = f"https://pack-yak.intomanga.com/images/manga/{friendly_manga_name}/chapter/{chapter_number}/page/{img_tag['data-pagenumber']}/{img_tag['id']}"
-                imagenes.append(imagen_url)  # Agregar la URL a la lista de imágenes
+
+                # Aquí simplemente agregamos la URL de la imagen a la lista
+                imagenes.append(imagen_url)  # Agregar la URL de la imagen a la lista
 
         return imagenes  # Retornar la lista de imágenes
 
     except Exception as e:
         print(f"Error al obtener imágenes del capítulo: {e}")
         return {'error': str(e)}  # Manejar el error
-
 
 @app.route('/api/getAnimesByGenre', methods=['GET'])
 def api_obtener_animes_por_genero():
