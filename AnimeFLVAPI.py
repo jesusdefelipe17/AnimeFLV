@@ -751,7 +751,7 @@ def obtener_mangas_mas_vistos():
     url_mangas_vistos = "https://inmanga.com/manga/getMostViewedMangas"
     
     try:
-        response = requests.get(url_mangas_vistos)
+        response = requests.get(url_mangas_vistos,headers=headers)
         response.raise_for_status()
 
         # Parseamos el HTML usando BeautifulSoup
@@ -916,7 +916,7 @@ def obtener_imagenes_manga(url_capitulo):
         url_capitulo_detalle = f"https://inmanga.com/chapter/chapterIndexControls?identification={url_capitulo}"
 
         # Hacer una solicitud para obtener los datos de las páginas
-        response_capitulo_detalle = requests.get(url_capitulo_detalle)
+        response_capitulo_detalle = requests.get(url_capitulo_detalle,headers=headers)
         response_capitulo_detalle.raise_for_status()
 
         # Extraer datos de los inputs hidden
