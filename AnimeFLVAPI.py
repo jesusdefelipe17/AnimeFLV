@@ -9,7 +9,7 @@ from flask_cors import CORS
 import unicodedata
 from cachetools import TTLCache
 import sqlite3
-import re
+import random
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Permitir cualquier origen
@@ -101,6 +101,10 @@ def guardar_serie_en_bbdd(serie_data):
     except sqlite3.Error as e:
         print(f"Error al guardar los datos en la base de datos: {str(e)}")
 
+def clean_string(s):
+    """Elimina caracteres Unicode no deseados y devuelve un string limpio."""
+    # Decodifica caracteres Unicode y reemplaza caracteres indeseables
+    return s.encode('utf-8').decode('unicode_escape').replace("\u200b", '').replace("\u00a0", ' ').strip()
 
 
 def quitar_acentos(texto):
@@ -742,127 +746,202 @@ def obtener_animes_por_genero(generos):
         print(f"Error en la solicitud HTTP: {e}")
         return []
     
-def obtener_mangas_populares():
-    """Obtiene los mangas más populares desde la página principal de espscans."""
-    url_mangas_populares = "https://www.espscans.com"
+def obtener_mangas_mas_vistos():
+    """Obtiene los mangas más vistos desde la página de InManga."""
+    url_mangas_vistos = "https://inmanga.com/manga/getMostViewedMangas"
     
     try:
-        logger.info(f"Realizando solicitud GET a {url_mangas_populares}")
-        response = requests.get(url_mangas_populares, headers=headers)
+        response = requests.get(url_mangas_vistos)
         response.raise_for_status()
-        logger.info(f"Solicitud exitosa. Código de estado: {response.status_code}")
+
+        # Parseamos el HTML usando BeautifulSoup
         soup = BeautifulSoup(response.text, 'html.parser')
+
+        mangas_vistos = []
+
+        # Buscamos todos los elementos de manga dentro de los enlaces
+        for item in soup.find_all('a', class_='list-group-item'):
+            try:
+                # Obtenemos el título del manga
+                titulo_tag = item.find('strong', class_='media-box-heading')
+                titulo = titulo_tag.text.strip() if titulo_tag else 'Sin título'
+
+                # Obtenemos el enlace del manga
+                enlace = item['href']
+                enlace_completo = f"https://inmanga.com{enlace}"
+
+                # Obtenemos la portada (imagen)
+                img_tag = item.find('img', class_='ImageContainer')
+                portada = img_tag['src'] if img_tag else None
+
+                # Generamos una calificación aleatoria entre 3 y 5
+                calificacion = round(random.uniform(3, 5), 2)
+
+                # Obtenemos el ID del manga (es el nombre en la URL de la imagen)
+                if portada:
+                    id_manga = portada.split('/')[-2]
+
+                # Añadimos el manga a la lista
+                mangas_vistos.append({
+                    'titulo': titulo,
+                    'portada': portada,
+                    'calificacion': calificacion,
+                    'enlace': enlace_completo,
+                    'id': id_manga
+                })
+
+            except Exception as e:
+                print(f"Error al procesar un manga: {e}")
         
-        # Buscando la lista de mangas en el contenedor 'loop-content'
-        logger.info("Buscando la lista de mangas populares en la página")
-        lista_mangas = soup.find('div', id='loop-content')
-
-        if not lista_mangas:
-            logger.warning("No se encontró la lista de mangas populares")
-            return []
-
-        populares = []
-
-        # Recorriendo cada item de manga en la lista
-        for item in lista_mangas.find_all('div', class_='page-listing-item'):
-            # Ahora, busquemos todas las columnas dentro de cada fila
-            columnas = item.find_all('div', class_='col-12 col-md-6 badge-pos-1')
-            
-            for columna in columnas:
-                try:
-                    # Obteniendo el título, imagen (portada), enlace y calificación
-                    titulo_tag = columna.find('h3', class_='h5')
-                    calificacion_tag = columna.find('span', class_='score')
-                    enlace_tag = columna.find('a', href=True)
-
-                    # Extrayendo la portada desde el atributo 'data-src' o 'src'
-                    imagen_tag = columna.find('img')
-                    if imagen_tag:
-                        portada = imagen_tag.get('data-src', imagen_tag.get('src'))
-
-                    if titulo_tag and calificacion_tag and imagen_tag and enlace_tag:
-                        titulo = titulo_tag.text.strip()
-                        calificacion = calificacion_tag.text.strip()
-                        enlace = enlace_tag['href']
-
-                        # Extrayendo el ID del manga desde el enlace (última parte de la URL)
-                        id_manga = enlace.split('/')[-2] if enlace.endswith('/') else enlace.split('/')[-1]
-
-                        populares.append({
-                            'titulo': titulo,
-                            'portada': portada,
-                            'calificacion': calificacion,
-                            'enlace': enlace,
-                            'id': id_manga   # Agregamos el ID del manga
-                        })
-                except Exception as e:
-                    logger.error(f"Error al procesar un elemento de manga popular: {e}")
-        
-        logger.info(f"Mangas populares encontrados: {len(populares)}")
-        return populares
+        print(f"Mangas más vistos encontrados: {len(mangas_vistos)}")
+        return mangas_vistos
 
     except requests.RequestException as e:
-        logger.error(f"Error en la solicitud HTTP: {e}")
+        print(f"Error en la solicitud HTTP: {e}")
         return []
     except Exception as e:
-        logger.error(f"Error inesperado: {e}")
+        print(f"Error inesperado: {e}")
         return []
-    
-def obtener_manga_perfil(nombre_manga):
-    """Obtiene los detalles del perfil de un manga desde la página de espscans."""
-    url_manga = f"https://www.espscans.com/manga/{nombre_manga}/"
+
+def obtener_manga_perfil(url_manga):
+    """Obtiene los detalles del perfil de un manga desde la página de InManga."""
     
     try:
-        logger.info(f"Realizando solicitud GET a {url_manga}")
-        response = requests.get(url_manga)
+        print(f"Realizando solicitud GET a {url_manga}")
+        
+        # Establecer encabezados para la solicitud
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+        
+        response = requests.get(url_manga, headers=headers)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Obtener el póster
-        poster_tag = soup.find('div', class_='summary_image').find('img')
-        poster = poster_tag.get('data-src', poster_tag.get('src')) if poster_tag else 'Sin imagen'
+        # Obtener el contenedor principal donde están el título y la descripción
+        contenedor_manga = soup.find('div', class_='col-md-9 col-sm-8 col-xs-12')
 
-        # Obtener título
-        titulo_tag = soup.find('span', property='name')
+        if not contenedor_manga:
+            print("No se encontró el contenedor del manga.")
+            return {'error': 'No se encontró el contenedor del manga.'}
+
+        # Obtener el título del manga desde el div con clase 'panel-heading visible-xs'
+        titulo_tag = soup.find('div', class_='panel-heading visible-xs')
         titulo = titulo_tag.text.strip() if titulo_tag else 'Desconocido'
 
         # Generar el id con el título en minúsculas y reemplazar espacios por guiones
-        id_manga = titulo.lower().replace(" ", "-") if titulo else 'sin-id'
+        id_manga = re.sub(r'\s+', '-', titulo.lower()) if titulo else 'sin-id'
 
-        # Obtener calificación
-        calificacion_tag = soup.find('span', property='ratingValue')
-        calificacion = calificacion_tag.text.strip() if calificacion_tag else 'N/A'
+        # Obtener el póster (imagen)
+        poster_tag = soup.find('div', class_='text-center bg-center custom-bg-center').find('img')
+        poster = poster_tag['src'] if poster_tag else 'Sin imagen'
+        poster = 'https://inmanga.com' + poster if poster != 'Sin imagen' else poster
 
-      
-        # Obtener géneros
-        generos_tag = soup.find('div', class_='genres-content')
-        generos = 'Ninguno'  # Valor predeterminado
-        if generos_tag:
-             generos = ', '.join([a.text.strip() for a in generos_tag.find_all('a')])
-               
+        # Obtener la lista de elementos de estado, publicación, periodicidad, etc.
+        elementos_info = soup.find('div', class_='list-group')
+        estado, publicacion, periodicidad, proximo_capitulo = 'Desconocido', 'Desconocida', 'Desconocida', 'No disponible'
 
-        # Obtener y limpiar descripción
-        descripcion_tag = soup.find('div', class_='description-summary').find('p')
-        descripcion = quitar_acentos(descripcion_tag.text.replace("\u00a0"," ").replace("\u200b"," ").replace("\u00b0"," ")) if descripcion_tag else 'Sin descripción'
+        # Iterar sobre cada 'a' con la clase 'list-group-item'
+        for item in elementos_info.find_all('a', class_='list-group-item'):
+            # Obtener el texto del enlace (descripción)
+            descripcion_item = item.get_text(strip=True)
+            # Obtener el valor dentro del span
+            span = item.find('span')
+            valor_span = span.text.strip() if span else None
 
-        descripcion_limpia = re.sub(r'\(.*?\)', '',descripcion)
+            if 'Estado' in descripcion_item:
+                estado = valor_span if valor_span else 'Desconocido'
+            elif 'Publicación' in descripcion_item:
+                publicacion = valor_span if valor_span else 'Desconocida'
+            elif 'Periodicidad' in descripcion_item:
+                periodicidad = valor_span if valor_span else 'Desconocida'
 
+        # Caso especial: Obtener próximo capítulo desde la clase nextChapterPublicationContainer
+        proximo_capitulo_tag = elementos_info.find('a', class_='nextChapterPublicationContainer')
+        if proximo_capitulo_tag:
+            proximo_capitulo_span = proximo_capitulo_tag.find('span', class_='nextChapterPublicationInput')
+            proximo_capitulo = proximo_capitulo_span.text.strip() if proximo_capitulo_span and proximo_capitulo_span.text else 'No disponible'
 
-        # Devolver los datos en un diccionario, incluyendo el campo id
+        # Obtener y limpiar descripción desde el panel-body correcto
+        descripcion_tag = contenedor_manga.find('div', class_='panel-body')
+        descripcion = descripcion_tag.text.strip() if descripcion_tag else 'Sin descripción'
+        descripcion_limpia = re.sub(r'\s+', ' ', descripcion).strip()
+
+        # Obtener el identificador de manga del URL
+        identificador_manga = url_manga.split('/')[-1].split('?')[0]  # Extrae el identificador al final del URL
+        url_capitulos = f"https://inmanga.com/chapter/getall?mangaIdentification={identificador_manga}"
+        
+        # Obtener capítulos desde la API
+        print(f"Obteniendo capítulos desde {url_capitulos}")
+        response_capitulos = requests.get(url_capitulos, headers=headers)
+        response_capitulos.raise_for_status()
+        
+        capitulos_data = json.loads(response_capitulos.text)  # Decodificar la respuesta JSON
+
+       # Procesar los capítulos
+        capitulos = {}  # Cambiado de lista a diccionario
+        # La respuesta puede estar en un string, así que debemos volver a cargarla
+        capitulos_json = json.loads(capitulos_data['data'])
+
+        for index, capitulo in enumerate(capitulos_json['result']):
+            # Solo recoger la identificación para la llamada de siguiente nivel
+            identificacion = capitulo['Identification']
+            capitulos[index + 1] = {  # Utilizamos index + 1 como clave para empezar desde 1
+                'chapter_id': identificacion
+            }
+           
+        # Devolver los capítulos en un diccionario
         return {
             'id': id_manga,
             'titulo': titulo,
             'poster': poster,
-            'calificacion': calificacion,
-            'generos': generos,
-            'descripcion': re.sub(r'\s+', ' ', descripcion_limpia).strip()
+            'estado': quitar_acentos_y_caracteres_raros(estado),
+            'publicacion': publicacion,
+            'periodicidad': periodicidad,
+            'proximo_capitulo': proximo_capitulo,
+            'descripcion': quitar_acentos_y_caracteres_raros(descripcion_limpia),
+            'capitulos': capitulos  # Añadir el diccionario de capítulos
         }
 
     except Exception as e:
-        logger.error(f"Error al obtener el perfil del manga {nombre_manga}: {e}")
-        return {'error': f"No se pudo obtener el perfil del manga {nombre_manga}."}
+        print(f"Error al obtener el perfil del manga {url_manga}: {e}")
+        return {'error': f"No se pudo obtener el perfil del manga {url_manga}."}
+
+def obtener_imagenes_manga(url_capitulo):
+    """Obtiene las imágenes de un capítulo del manga desde la URL proporcionada."""
     
+    try:
+        # Crear la URL del capítulo detallado
+        url_capitulo_detalle = f"https://inmanga.com/chapter/chapterIndexControls?identification={url_capitulo}"
+
+        # Hacer una solicitud para obtener los datos de las páginas
+        response_capitulo_detalle = requests.get(url_capitulo_detalle)
+        response_capitulo_detalle.raise_for_status()
+
+        # Extraer datos de los inputs hidden (aunque no los vamos a usar aquí)
+        soup_detalle = BeautifulSoup(response_capitulo_detalle.text, 'html.parser')
+        chapter_number = soup_detalle.find('input', {'id': 'ChapterNumber'})['value']
+        friendly_manga_name = soup_detalle.find('input', {'id': 'FriendlyMangaName'})['value']
+
+        # Recoger imágenes de las páginas
+        paginas = soup_detalle.find_all('a', class_='NextPage')  # Obtiene todas las páginas
+        imagenes = []  # Lista para almacenar las URLs de las imágenes
+
+        for pagina in paginas:
+            # Encuentra la etiqueta <img> dentro del <a> y extrae data-pagenumber y id
+            img_tag = pagina.find('img', class_='ImageContainer')
+            if img_tag:
+                # Aquí puedes construir la URL utilizando data-pagenumber y el id del img_tag
+                imagen_url = f"https://pack-yak.intomanga.com/images/manga/{friendly_manga_name}/chapter/{chapter_number}/page/{img_tag['data-pagenumber']}/{img_tag['id']}"
+                imagenes.append(imagen_url)  # Agregar la URL a la lista de imágenes
+
+        return imagenes  # Retornar la lista de imágenes
+
+    except Exception as e:
+        print(f"Error al obtener imágenes del capítulo: {e}")
+        return {'error': str(e)}  # Manejar el error
+
 
 @app.route('/api/getAnimesByGenre', methods=['GET'])
 def api_obtener_animes_por_genero():
@@ -953,25 +1032,40 @@ def test():
 
 @app.route('/api/MangasPopulares', methods=['GET'])
 def api_obtener_mangas_populares():
-    mangas_populares = obtener_mangas_populares()
+    mangas_populares = obtener_mangas_mas_vistos()
     return jsonify(mangas_populares)
 
 
 @app.route('/api/getMangaPerfil', methods=['GET'])
 def api_get_manga_perfil():
-    nombre_manga = request.args.get('manga')
+    url_manga = request.args.get('manga')
     
-    if not nombre_manga:
+    if not url_manga:
         return jsonify({'error': 'El parámetro "manga" es obligatorio.'}), 400
 
     # Obtener datos del perfil del manga desde el scraping
-    manga_perfil = obtener_manga_perfil(nombre_manga)
+    manga_perfil = obtener_manga_perfil(url_manga)
     
     if 'error' in manga_perfil:
         return jsonify(manga_perfil), 500
     
     return jsonify(manga_perfil)
 
+@app.route('/api/getMangaImages', methods=['GET'])
+def api_get_manga_images():
+    # Obtener la URL del capítulo del manga
+    url_capitulo = request.args.get('url')
+    
+    if not url_capitulo:
+        return jsonify({'error': 'El parámetro "url" es obligatorio.'}), 400
+
+    # Obtener las imágenes del capítulo del manga
+    imagenes = obtener_imagenes_manga(url_capitulo)
+    
+    if 'error' in imagenes:
+        return jsonify(imagenes), 500
+    
+    return jsonify(imagenes)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True)
