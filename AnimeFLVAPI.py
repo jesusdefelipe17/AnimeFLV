@@ -10,6 +10,7 @@ import unicodedata
 from cachetools import TTLCache
 import sqlite3
 import random
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Permitir cualquier origen
@@ -101,6 +102,18 @@ def guardar_serie_en_bbdd(serie_data):
     except sqlite3.Error as e:
         print(f"Error al guardar los datos en la base de datos: {str(e)}")
 
+
+def convertir_fecha_a_formato_espanol(fecha):
+    """Convierte una fecha del formato 'YYYY/MM/DD HH:MM:SS AM/PM' al formato español 'DD/MM/YYYY HH:MM:SS' en 24 horas."""
+    try:
+        # Convertimos la cadena de fecha al objeto datetime
+        fecha_dt = datetime.strptime(fecha, '%Y/%m/%d %I:%M:%S %p')
+        # Formateamos la fecha al formato deseado (DD/MM/YYYY HH:MM:SS en 24 horas)
+        fecha_espanol = fecha_dt.strftime('%d/%m/%Y %H:%M:%S')
+        return fecha_espanol
+    except ValueError:
+        return 'Fecha no disponible'
+
 def clean_string(s):
     """Elimina caracteres Unicode no deseados y devuelve un string limpio."""
     # Decodifica caracteres Unicode y reemplaza caracteres indeseables
@@ -120,8 +133,8 @@ def quitar_acentos_y_caracteres_raros(texto):
     texto_sin_acentos = ''.join(char for char in texto_normalizado if unicodedata.category(char) != 'Mn')
     
     # Eliminar caracteres no alfanuméricos (excepto espacios)
-    texto_limpio = re.sub(r'[^a-zA-Z0-9\s]', '', texto_sin_acentos)
-    
+    texto_limpio = re.sub(r'[^a-zA-Z0-9\s]', '', texto_sin_acentos).replace("\r","").replace("\n"," ")
+
     return texto_limpio
 
 def extraer_datos_de_script(html):
@@ -367,35 +380,21 @@ def obtener_episodios(url_serie, pagina=0, limite=12):
     with sqlite3.connect('anime.db') as conn:
         cursor = conn.cursor()
 
-        # Consultar si ya existen episodios para la serie en la base de datos
-        cursor.execute('SELECT * FROM episodios WHERE serie_id = ? LIMIT ?, ?', (serie_id, pagina * limite, limite))
+        # Consultar episodios existentes en la base de datos con límite y desplazamiento (paginación)
+        cursor.execute('SELECT numero FROM episodios WHERE serie_id = ? LIMIT ? OFFSET ?', 
+                       (serie_id, limite, pagina * limite))
         episodios_en_bbdd = cursor.fetchall()
+        episodios_en_bbdd = [int(episodio[0].split(' ')[-1]) for episodio in episodios_en_bbdd]  # Extraer números de episodios
 
         episodios = []  # Para almacenar los episodios encontrados
 
+        # Si se encuentran episodios en la base de datos, se almacenan y se verifican
         if episodios_en_bbdd:
-            logger.info(f"Episodios encontrados en la base de datos para la serie {serie_id}, página {pagina}")
-            
-            for episodio in episodios_en_bbdd:
-                videos = episodio[4]  # Asumiendo que el campo de videos es el cuarto
-                episodio_num = episodio[2].split(' ')[-1]  # Extraer solo el número del episodio
+            logger.info(f"Episodios encontrados en la base de datos para la serie {serie_id}: {episodios_en_bbdd}")
+        else:
+            logger.info(f"No se encontraron episodios en la base de datos para la serie {serie_id}")
 
-                if videos == '[]':  # Si el campo de videos es una lista vacía
-                    logger.info(f"Videos vacíos para el episodio {episodio_num}, recuperando de la web")
-                    # Recuperar datos desde la web
-                    url_episodio = f'https://www3.animeflv.net/ver/{serie_id}-{episodio_num}'
-                    videos = obtener_videos(url_episodio)
-                    
-                    # Actualizar la base de datos con los nuevos videos
-                    actualizar_episodio_en_bbdd(serie_id, f"Episodio {episodio_num}", videos)
-                else:
-                    logger.info(f"Videos ya disponibles para el episodio {episodio_num}")
-
-                episodios.append({'enlace': episodio[3], 'episodio': f"Episodio {episodio_num}", 'videos': videos})
-
-            return episodios
-
-    # Si no se encontraron episodios en la base de datos, hacemos la solicitud a la web
+    # Si no se encontraron episodios en la base de datos o queremos verificar nuevos episodios, hacemos la solicitud a la web
     try:
         # Añadimos el timeout de 1 segundo a la solicitud
         logger.info(f"Realizando solicitud GET a {url_serie}")
@@ -410,24 +409,45 @@ def obtener_episodios(url_serie, pagina=0, limite=12):
             logger.warning(f"No se encontraron datos de episodios en {url_serie}")
             return []
 
-        episodios = []  # Para almacenar los episodios obtenidos en esta página
+        episodios = []  # Para almacenar los episodios obtenidos de la web
+        nuevos_episodios = []  # Para almacenar los episodios nuevos que no están en la base de datos
+
+        # Aplicar la paginación a los episodios obtenidos desde la web
         inicio = pagina * limite
         fin = inicio + limite
+        episodios_data_paginados = episodios_data[inicio:fin]  # Solo obtenemos los episodios de esta página
 
-        for i, (episodio_num, episodio_id) in enumerate(episodios_data[inicio:fin], start=inicio):
-            # Construir la URL del episodio
-            url_episodio = f'https://www3.animeflv.net/ver/{serie_id}-{episodio_num}'
-            
-            # Llamar a la función obtener_videos para obtener los enlaces de videos
-            videos = obtener_videos(url_episodio)
+        for episodio_num, episodio_id in episodios_data_paginados:
+            episodio_num_int = int(episodio_num)
+
+            # Si el episodio no está en la base de datos, lo añadimos
+            if episodio_num_int not in episodios_en_bbdd:
+                url_episodio = f'https://www3.animeflv.net/ver/{serie_id}-{episodio_num}'
+                
+                # Llamar a la función obtener_videos para obtener los enlaces de videos
+                videos = obtener_videos(url_episodio)
+                
+                nuevos_episodios.append({
+                    'enlace': url_episodio,
+                    'episodio': f"Episodio {episodio_num}",
+                    'videos': videos  # Incluir la información de los videos para cada episodio
+                })
+
+                # Guardar los episodios nuevos en la base de datos
+                guardar_episodio_en_bbdd(serie_id, f"Episodio {episodio_num}", url_episodio, videos)
+
+            # Añadir los episodios existentes o nuevos a la lista de episodios
             episodios.append({
-                'enlace': url_episodio,
+                'enlace': f'https://www3.animeflv.net/ver/{serie_id}-{episodio_num}',
                 'episodio': f"Episodio {episodio_num}",
-                'videos': videos  # Incluir la información de los videos para cada episodio
+                'videos': [] if episodio_num_int in episodios_en_bbdd else videos
             })
 
-            # Guardar los episodios en la base de datos
-            guardar_episodio_en_bbdd(serie_id, f"Episodio {episodio_num}", url_episodio, videos)
+        # Informar sobre los nuevos episodios añadidos
+        if nuevos_episodios:
+            logger.info(f"Se añadieron {len(nuevos_episodios)} episodios nuevos a la base de datos")
+        else:
+            logger.info(f"No se encontraron episodios nuevos para añadir.")
 
         return episodios
 
@@ -536,6 +556,71 @@ def buscar_serie(nombre_serie):
     except Exception as e:
         return {'error': f"Error inesperado: {e}"}
 
+def buscar_serie_manga(nombre_serie):
+    """Busca una serie de manga en InManga y guarda los resultados en la base de datos."""
+
+    # Reemplazamos espacios por %20 para la búsqueda
+    url_busqueda = f"https://inmanga.com/manga/GetQuickSearch?name={nombre_serie.replace(' ', '%20')}"
+    
+    try:
+        response = requests.get(url_busqueda, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
+        
+        # Parseamos el JSON devuelto
+        json_data = json.loads(response.json()["data"])
+        
+        if not json_data.get("success", False):
+            return {'error': "Búsqueda fallida en InManga."}
+
+        # Extraer el resultado de la búsqueda
+        resultados = json_data.get("result", [])
+        if not resultados:
+            return []
+
+        series = []
+        for resultado in resultados:
+            # Extraemos los datos necesarios
+            titulo = resultado.get('Name', 'Sin título')
+            poster_url = resultado.get('ThumbnailPath', '')  # Poster
+            descripcion = resultado.get('Sinopsis', 'Sin descripción disponible')
+            id_serie = resultado.get('Identification', 'Sin ID')
+            
+          
+            partes_poster = poster_url.split('/')  # Dividir la URL por '/'
+            nombre_serie_poster = partes_poster[-2]  # El nombre de la serie está justo antes del ID
+            poster_id = partes_poster[-1]  # El ID del manga está al final
+
+            # Para la URL del manga, usamos el nombre de la serie y el ID extraído
+            url = f"https://inmanga.com/ver/manga/{nombre_serie_poster}/{poster_id}"
+
+            # Los siguientes campos no están disponibles en InManga, así que los inventamos o ponemos valores predeterminados
+            tipo = resultado.get('BroadcastStatusDescription', r'N\A')  # Usando cadena cruda
+            puntuacion = round(random.uniform(3.5, 5.0), 1)
+            
+            # Crear el diccionario serie_data con los campos requeridos
+            serie_data = {
+                'titulo': titulo,
+                'url': url,
+                'poster': poster_url,
+                'tipo': quitar_acentos_y_caracteres_raros(tipo),
+                'puntuacion': puntuacion,
+                'descripcion': quitar_acentos_y_caracteres_raros(descripcion),
+                'id': id_serie
+            }
+            
+            # Guardamos la serie en la base de datos
+           
+            
+            # Añadimos la serie a la lista de resultados
+            series.append(serie_data)
+
+        return series
+
+    except requests.RequestException as e:
+        return {'error': f"Error en la solicitud HTTP: {e}"}
+    except Exception as e:
+        return {'error': f"Error inesperado: {e}"}
+    
 
 def obtener_ultimos_animes():
     """Obtiene los últimos animes de AnimeFLV."""
@@ -802,6 +887,76 @@ def obtener_mangas_mas_vistos():
     except Exception as e:
         print(f"Error inesperado: {e}")
         return []
+    
+def obtener_mangas_ultimos_capitulos():
+    """Obtiene los capítulos más recientes desde la página de InManga."""
+    url_ultimos_capitulos = "https://inmanga.com/chapter/getRecentChapters"
+    
+    try:
+        response = requests.get(url_ultimos_capitulos, headers=headers)
+        response.raise_for_status()
+
+        # Parseamos el HTML usando BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        mangas_capitulos = []
+
+        # Buscamos los elementos de los capítulos recientes
+        for item in soup.find_all('a', class_='list-group-item'):
+            try:
+                # Obtenemos el título del manga
+                titulo_tag = item.find('strong', class_='media-box-heading')
+                titulo = titulo_tag.text.strip() if titulo_tag else 'Sin título'
+
+                # Obtenemos el enlace del capítulo
+                enlace = item['href']
+                enlace_completo = enlace.rsplit('/', 1)[-1]
+
+                # Obtenemos la portada (imagen)
+                img_tag = item.find('img', class_='ImageContainer')
+                portada = img_tag['src'] if img_tag else None
+
+                # Obtenemos el ID del manga desde la URL de la portada
+                id_manga = None
+                if portada:
+                    id_manga = portada.split('/')[-1]  # Tomamos la última parte de la URL
+
+                 # Obtenemos el número del capítulo
+                capitulo_tag = item.find('div', class_='recent-chapter-container-footer')
+                capitulo = capitulo_tag.find('strong').text.strip() if capitulo_tag else 'Capítulo no disponible'
+
+
+                fecha_tag = item.find('span', class_='chapterRegistrationDateContainer')
+                fecha_registro = fecha_tag['data-registrationdate'] if fecha_tag else 'Fecha no disponible'
+
+                # Convertimos la fecha al formato español si está disponible
+                if fecha_registro != 'Fecha no disponible':
+                    fecha_registro = convertir_fecha_a_formato_espanol(fecha_registro)
+
+                # Añadimos el capítulo a la lista
+                mangas_capitulos.append({
+                    'titulo': titulo,
+                    'portada': portada,
+                    'capitulo': capitulo,  
+                    'enlace': enlace_completo,
+                    'id': id_manga,
+                    'fecha_registro':fecha_registro
+                })
+
+            except Exception as e:
+                print(f"Error al procesar un capítulo: {e}")
+        
+        print(f"Capítulos más recientes encontrados: {len(mangas_capitulos)}")
+        return mangas_capitulos
+
+    except requests.RequestException as e:
+        print(f"Error en la solicitud HTTP: {e}")
+        return []
+    except Exception as e:
+        print(f"Error inesperado: {e}")
+        return []
+
+
 
 def obtener_manga_perfil(url_manga):
     """Obtiene los detalles del perfil de un manga desde la página de InManga."""
@@ -979,6 +1134,16 @@ def api_buscar_serie():
     series = buscar_serie(nombre_serie)
     return jsonify(series)
 
+
+@app.route('/api/getManga', methods=['GET'])
+def api_buscar_serie_manga():
+    nombre_serie = request.args.get('manga')
+    if not nombre_serie:
+        return jsonify({'error': 'El parámetro "manga" es obligatorio.'}), 400
+    series = buscar_serie_manga(nombre_serie)
+    return jsonify(series)
+
+
 @app.route('/api/episodios', methods=['GET'])
 def api_obtener_episodios():
     url_serie = request.args.get('url_serie')
@@ -1067,6 +1232,14 @@ def api_get_manga_images():
         return jsonify(imagenes), 500
     
     return jsonify(imagenes)
+
+
+@app.route('/api/MangaUltimosCapitulos', methods=['GET'])
+def api_obtener_ultimos_capitulos():
+    mangas_ultimos_capitulos = obtener_mangas_ultimos_capitulos()
+    return jsonify(mangas_ultimos_capitulos)
+
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True)
