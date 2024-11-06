@@ -1240,7 +1240,12 @@ def api_obtener_ultimos_capitulos():
     mangas_ultimos_capitulos = obtener_mangas_ultimos_capitulos()
     return jsonify(mangas_ultimos_capitulos)
 
+
 if __name__ == '__main__':
-    # Convertir el puerto a entero
-    port = int(os.environ.get("PORT", 8000))
+    # Obtén el puerto y maneja el caso donde `PORT` esté vacío
+    port = os.environ.get("PORT", "8000")
+    if not port.isdigit():
+        port = 8000  # Usa 8000 como valor por defecto si `PORT` no es válido
+    else:
+        port = int(port)
     app.run(host='0.0.0.0', port=port)

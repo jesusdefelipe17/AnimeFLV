@@ -11,8 +11,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia el resto de los archivos de la aplicación
 COPY . .
 
-# Expone el puerto, pero Railway manejará la variable PORT
+# Expone el puerto 8000, aunque Railway debería asignar `PORT`
 EXPOSE 8000
+
+# Define el puerto en las variables de entorno de Docker
+ENV PORT=8000
 
 # Comando para ejecutar la aplicación
 CMD ["python", "AnimeFLVAPI.py"]
