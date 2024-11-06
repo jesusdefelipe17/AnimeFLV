@@ -1100,6 +1100,171 @@ def obtener_imagenes_manga(url_capitulo):
         print(f"Error al obtener imágenes del capítulo: {e}")
         return {'error': str(e)}  # Manejar el error
 
+def obtener_manwhas_mas_populares():
+    """Obtiene los manwhas más populares desde la página de Zona Olympus."""
+    url = "https://zonaolympus.com"
+
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        # Parseamos el HTML usando BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        manwhas_populares = []
+        ids_vistos = set()  # Conjunto para almacenar IDs ya vistos
+
+        # Busca todos los elementos figure en la sección de manwhas populares
+        for item in soup.select('section.mx-1 figure'):
+            try:
+                # Título del manwha
+                titulo_tag = item.find('figcaption')
+                titulo = titulo_tag.text.strip() if titulo_tag else 'Sin título'
+
+                # Enlace del manwha
+                enlace_tag = item.find('a')
+                enlace_relativo = enlace_tag['href'] if enlace_tag else '#'
+                enlace_completo = f"{url}{enlace_relativo}"
+
+                # Portada (URL de la imagen)
+                img_tag = item.find('img')
+                portada = img_tag['src'] if img_tag else None
+
+                # ID del manwha basado en el URL de la imagen
+                id_manwha = portada.split('/')[-2] if portada else 'N/A'
+
+                # Verificar si el ID ya fue agregado
+                if id_manwha in ids_vistos:
+                    continue  # Saltar si el ID ya está en el conjunto
+
+                # Generar una calificación aleatoria entre 3 y 5
+                calificacion = round(random.uniform(3, 5), 2)
+
+                # Añadir el ID al conjunto y el manwha a la lista final
+                ids_vistos.add(id_manwha)
+                manwhas_populares.append({
+                    'titulo': titulo,
+                    'portada': portada,
+                    'calificacion': calificacion,
+                    'enlace': enlace_completo,
+                    'id': id_manwha
+                })
+
+            except Exception as e:
+                print(f"Error al procesar un manwha: {e}")
+
+        print(f"Manwhas populares encontrados: {len(manwhas_populares)}")
+        return manwhas_populares
+
+    except requests.RequestException as e:
+        print(f"Error en la solicitud HTTP: {e}")
+        return []
+    except Exception as e:
+        print(f"Error inesperado: {e}")
+        return []
+def obtener_capitulos(url_api):
+    """Obtiene todos los capítulos de un manhwa desde la API de Zona Olympus."""
+    capitulos = []
+    pagina = 1
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+    }
+
+    while True:
+        # Hacemos la solicitud a la API con la página actual
+        response = requests.get(f"{url_api}?page={pagina}", headers=headers)
+        if response.status_code != 200:
+            print(f"Error al solicitar la página {pagina} de capítulos: {response.status_code}")
+            break
+
+        # Imprimir el contenido de la respuesta para depurar
+        print(f"Contenido de la respuesta: {response.text[:500]}")  # Solo los primeros 500 caracteres para verificar
+
+        try:
+            data = response.json()
+        except ValueError as e:
+            print(f"Error al decodificar la respuesta JSON: {e}")
+            break
+
+        for capitulo in data['data']:
+            # Convertimos la fecha de publicación a un formato más legible
+            fecha_publicacion = datetime.fromisoformat(capitulo['published_at'].replace("Z", ""))
+            capitulos.append({
+                'nombre': capitulo['name'],
+                'id': capitulo['id'],
+                'fecha_publicacion': fecha_publicacion.strftime('%Y-%m-%d %H:%M:%S'),
+                'equipo': capitulo['team']['name'],
+                'leido': capitulo['read_by_auth']
+            })
+
+        # Verificamos si hay una siguiente página
+        if not data['links']['next']:
+            break  # Si no hay siguiente página, terminamos el ciclo
+        pagina += 1
+
+    return capitulos
+
+
+def obtener_manwha_perfil(url_manwha):
+    """Obtiene los detalles del perfil de un manhwa desde la página de Zona Olympus y sus capítulos desde la API."""
+    
+    try:
+        print(f"Realizando solicitud GET a {url_manwha}")
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+        
+        # Realizamos la solicitud GET
+        response = requests.get(url_manwha, headers=headers)
+        response.raise_for_status()
+        
+        # Parseamos el contenido HTML con BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Buscamos el script que contiene los datos en formato JSON
+        script_tag = soup.find('script', {'id': '__NUXT_DATA__'})
+        
+        if not script_tag:
+            print("No se encontró el script con los datos de perfil del manwha.")
+            return {'error': 'No se encontró el script con los datos.'}
+        
+        # Extraemos el contenido del script como JSON
+        try:
+            json_data = json.loads(script_tag.string.strip())
+        except json.JSONDecodeError:
+            print("Error al decodificar el JSON del script.")
+            return {'error': 'Error al decodificar el JSON.'}
+        
+       
+        
+        # Extraemos la información relevante
+        titulo = json_data[7]
+        id_manwha = json_data[6]
+        descripcion = json_data[8]
+        portada = json_data[41]
+        vistas = json_data[14]
+        likes = json_data[16]
+        
+        # Devolver la información extraída
+        return {
+            'id': id_manwha,
+            'titulo': titulo,
+            'portada': portada,
+            'vistas': vistas,
+            'likes': likes,
+            'descripcion': descripcion,
+            'capitulos': ''
+        }
+
+    except Exception as e:
+        print(f"Error al obtener el perfil del manwha {url_manwha}: {e}")
+        return {'error': f"No se pudo obtener el perfil del manwha {url_manwha}."}
+
+
 @app.route('/api/getAnimesByGenre', methods=['GET'])
 def api_obtener_animes_por_genero():
     """
@@ -1240,6 +1405,27 @@ def api_obtener_ultimos_capitulos():
     mangas_ultimos_capitulos = obtener_mangas_ultimos_capitulos()
     return jsonify(mangas_ultimos_capitulos)
 
+
+
+@app.route('/api/ManwhasPopulares', methods=['GET'])
+def api_obtener_manwhas_populares():
+    manwhas_populares = obtener_manwhas_mas_populares()
+    return jsonify(manwhas_populares)
+
+@app.route('/api/getManwhaPerfil', methods=['GET'])
+def api_get_manwha_perfil():
+    url_manwha = request.args.get('manwha')
+    
+    if not url_manwha:
+        return jsonify({'error': 'El parámetro "manwha" es obligatorio.'}), 400
+
+    # Obtener datos del perfil del manwha desde el scraping
+    manwha_perfil = obtener_manwha_perfil(url_manwha)
+    
+    if 'error' in manwha_perfil:
+        return jsonify(manwha_perfil), 500
+    
+    return jsonify(manwha_perfil)
 
 if __name__ == '__main__':
     # Obtén el puerto y maneja el caso donde `PORT` esté vacío
