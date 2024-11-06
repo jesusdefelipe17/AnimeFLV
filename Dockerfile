@@ -1,18 +1,18 @@
-# syntax=docker/dockerfile:1
+# Usa una imagen base de Python
+FROM python:3.9-slim
 
-ARG PYTHON_VERSION=3.12.6
+# Establece el directorio de trabajo
+WORKDIR /app
 
-FROM python:${PYTHON_VERSION}-slim
+# Copia el archivo de dependencias (requirements.txt) y lo instala
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-LABEL fly_launch_runtime="flask"
-
-WORKDIR /code
-
-COPY requirements.txt requirements.txt
-RUN pip3 install -r requirements.txt
-
+# Copia el resto de los archivos de la aplicación
 COPY . .
 
+# Expone el puerto, Railway usará la variable de entorno PORT
 EXPOSE 8000
 
-CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0", "--port=8000"]
+# Comando para ejecutar la aplicación (cambia a AnimeFLVAPI.py)
+CMD ["python", "AnimeFLVAPI.py"]

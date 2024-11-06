@@ -1,4 +1,3 @@
-import os
 from flask import Flask, request, jsonify, g
 import requests
 from bs4 import BeautifulSoup
@@ -1240,8 +1239,5 @@ def api_obtener_ultimos_capitulos():
     mangas_ultimos_capitulos = obtener_mangas_ultimos_capitulos()
     return jsonify(mangas_ultimos_capitulos)
 
-
-
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8000))  # Obtiene el puerto desde la variable de entorno
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=8000, debug=True)
