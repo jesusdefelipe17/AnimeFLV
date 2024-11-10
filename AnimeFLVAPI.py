@@ -1291,7 +1291,7 @@ def obtener_manwha_perfil(url_manwha):
         print(f"Error al obtener el perfil del manwha {url_manwha}: {e}")
         return {'error': f"No se pudo obtener el perfil del manwha {url_manwha}."} 
 def obtener_paginas_capitulo(url_capitulo):
-    """Obtiene las páginas de un capítulo desde la API de Zona Olympus."""
+    """Obtiene las páginas de un capítulo desde la API de Zona Olympus, junto con los capítulos previos y siguientes."""
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
@@ -1304,22 +1304,36 @@ def obtener_paginas_capitulo(url_capitulo):
         # Extraemos el JSON de la respuesta
         datos = response.json()
         
-        # Verifica que el JSON contenga el capítulo y sus páginas
-        if 'chapter' in datos and 'pages' in datos['chapter']:
-            return datos['chapter']['pages']
+        # Verifica que el JSON contenga la información necesaria
+        if 'chapter' in datos:
+            chapter_data = datos['chapter']
+            
+            # Extraemos las páginas del capítulo
+            pages = chapter_data.get('pages', [])
+            
+            # Extraemos el capítulo anterior y siguiente
+            prev_chapter = datos.get('prev_chapter', None)
+            next_chapter = datos.get('next_chapter', None)
+            
+            # Retornamos la información del capítulo, las páginas, y los capítulos previos y siguientes
+            return {
+                'pages': pages,
+                'prev_chapter': prev_chapter,
+                'next_chapter': next_chapter
+            }
         else:
-            print("No se encontraron las páginas del capítulo en la respuesta.")
-            return {'error': 'No se encontraron las páginas del capítulo.'}
+            print("No se encontró la información del capítulo en la respuesta.")
+            return {'error': 'No se encontró la información del capítulo.'}
     
     except Exception as e:
         print(f"Error al obtener las páginas del capítulo {url_capitulo}: {e}")
         return {'error': 'No se pudo obtener las páginas del capítulo.'}
-
-def obtener_manwhas(page):
+    
+def obtener_manwhas(page,direction):
     """Obtiene los manwhas desde la API de Zona Olympus para la página dada."""
     try:
         # La URL de la API externa, que requiere el parámetro `page`
-        url = f'https://zonaolympus.com/api/series?page={page}&direction=asc&type=comic'
+        url = f'https://zonaolympus.com/api/series?page={page}&direction={direction}&type=comic'
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
@@ -1344,6 +1358,7 @@ def obtener_manwhas(page):
                 'titulo': serie['name'],
                 'url': 'https://zonaolympus.com/series/comic-'+serie['slug'],
                 'poster': serie['cover'],
+                'puntuacion' : round(random.uniform(3, 5), 2),
                 'chapter_count': serie['chapter_count'],
                 'status': serie['status']['name'] if serie['status'] else None
             } for serie in series]
@@ -1355,6 +1370,46 @@ def obtener_manwhas(page):
     except Exception as e:
         # Si ocurre un error al obtener los manwhas, lo capturamos
         return {'error': f'Error al obtener manwhas: {str(e)}'}   
+
+def obtener_nuevos_capitulos(page):
+    """Obtiene los nuevos capítulos desde la API de Zona Olympus para la página dada."""
+    try:
+        # URL de la API externa con el parámetro `page`
+        url = f'https://zonaolympus.com/api/new-chapters?page={page}'
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+        
+        # Realiza la solicitud GET
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        # Extrae el JSON de la respuesta
+        data = response.json()
+
+        # Verifica que la respuesta contiene los datos esperados
+        if 'data' in data:
+            # Procesa los datos de cada capítulo
+            capitulos = [
+                {
+                    'id': item['id'],
+                    'titulo': item['name'],
+                    'enlace': f"https://zonaolympus.com/api/capitulo/{item['slug']}/{item['last_chapters'][0]['id']}",
+                    'portada': item['cover'],
+                    'estado': item['status'],
+                    'latest_chapter': item['last_chapters'][0] if item['last_chapters'] else None  # Toma solo el capítulo más reciente
+                }
+                for item in data['data']
+            ]
+            return capitulos
+        else:
+            return {'error': 'No se encontraron datos para esta página.'}
+
+    except Exception as e:
+        # Captura errores y devuelve un mensaje de error
+        return {'error': f'Error al obtener capítulos: {str(e)}'}
+
 
 @app.route('/api/getAnimesByGenre', methods=['GET'])
 def api_obtener_animes_por_genero():
@@ -1539,15 +1594,30 @@ def api_cargar_capitulos():
 def api_cargar_manwhas():
     # Obtiene el número de página desde el parámetro de la URL
     page = request.args.get('page', default=1, type=int)
+    direction = request.args.get('direction')
 
     # Llama a la función para obtener los datos de los manwhas
-    manwhas = obtener_manwhas(page)
+    manwhas = obtener_manwhas(page,direction)
     
     if 'error' in manwhas:
         return jsonify(manwhas), 500
 
     # Retorna los datos de los manwhas en formato JSON
     return jsonify({'manwhas': manwhas})
+
+@app.route('/api/cargarNuevosCapitulosManwha', methods=['GET'])
+def api_cargar_nuevos_capitulos():
+    # Obtiene el número de página desde el parámetro de la URL
+    page = request.args.get('page', default=1, type=int)
+    
+    # Llama a la función para obtener los datos de nuevos capítulos
+    capitulos = obtener_nuevos_capitulos(page)
+    
+    if 'error' in capitulos:
+        return jsonify(capitulos), 500
+
+    # Retorna los datos de los capítulos en formato JSON
+    return jsonify({'capitulos': capitulos})
 
 
 if __name__ == '__main__':
