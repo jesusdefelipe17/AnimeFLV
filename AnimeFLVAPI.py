@@ -1255,11 +1255,15 @@ def obtener_manwha_perfil(url_manwha):
         id_manwha = json_data[6] if len(json_data) > 6 else None
         descripcion = json_data[8] if len(json_data) > 8 else None
         url = json_data[9] if len(json_data) > 9 else None
+        genero = json_data[21] if len(json_data) > 21 else None
 
         # Buscamos la URL de la portada recorriendo el JSON en busca de la cadena de la URL
-        portada = None
+        portada = None  # Iniciar variable por si no encuentra ninguna portada
         for item in json_data:
-            if isinstance(item, str) and "https://dashboard.zonaolympus.com/storage/comics/covers" in item:
+            if isinstance(item, str) and (
+                "https://dashboard.zonaolympus.com/storage/comics/covers" in item or 
+                "https://dashboard.zonaolympus.com/storage/novels/covers" in item
+            ):
                 portada = item
                 break
 
@@ -1284,7 +1288,8 @@ def obtener_manwha_perfil(url_manwha):
             'portada': portada,
             'descripcion': descripcion,
             'capitulos': capitulos,
-            'url':url
+            'url':url,
+            'genero': genero
         }
 
     except Exception as e:
