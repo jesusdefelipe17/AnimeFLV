@@ -1359,7 +1359,7 @@ def obtener_manwhas(page,direction):
                 'url': 'https://zonaolympus.com/series/comic-'+serie['slug'],
                 'poster': serie['cover'],
                 'puntuacion' : round(random.uniform(3, 5), 2),
-                'chapter_count': serie['chapter_count'],
+                'capitulos': serie['chapter_count'],
                 'status': serie['status']['name'] if serie['status'] else None
             } for serie in series]
 
@@ -1410,7 +1410,97 @@ def obtener_nuevos_capitulos(page):
         # Captura errores y devuelve un mensaje de error
         return {'error': f'Error al obtener capítulos: {str(e)}'}
 
+def get_manhwa_busqueda(url_api):
+    """Obtiene la lista de manhwas desde la API de Zona Olympus según el término de búsqueda y mapea los nombres de campos."""
+    try:
+        print(f"Realizando solicitud GET a {url_api}")
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+        
+        # Realizamos la solicitud GET
+        response = requests.get(url_api, headers=headers)
+        response.raise_for_status()
+        
+        # Procesamos el JSON de la respuesta
+        json_data = response.json()
+        
+        # Verificamos si 'data' está presente en el JSON
+        if 'data' not in json_data:
+            return {'error': 'No se encontró la lista de manhwas en la respuesta.'}
+        
+        # Mapeamos los nombres de los campos
+        manhwa_lista = []
+        for item in json_data['data']:
+            # Obtener la URL de la imagen y reemplazar '-sm' por '-xl'
+            cover_url = item.get('cover', '')
+            if '-sm' in cover_url:
+                cover_url = cover_url.replace('-sm', '-xl')
 
+            manhwa_lista.append({
+                'poster': cover_url,  # Usamos la URL modificada
+                'titulo': item.get('name'),
+                'url': f"https://zonaolympus.com/series/comic-{item.get('slug')}",
+                'type': item.get('type'),
+                'id': item.get('id'),
+                'puntuacion' : round(random.uniform(3, 5), 2)
+            })
+        
+        return manhwa_lista
+    
+    except Exception as e:
+        print(f"Error al obtener la lista de manhwas: {e}")
+        return {'error': 'No se pudo obtener la lista de manhwas.'}
+    
+def get_manhwas_de_zonaolympus(url_api):
+    """Obtiene la lista de manhwas desde la API de Zona Olympus según los géneros y procesa la respuesta."""
+    try:
+        print(f"Realizando solicitud GET a {url_api}")
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+        
+        # Realizamos la solicitud GET
+        response = requests.get(url_api, headers=headers)
+        response.raise_for_status()
+        
+        # Procesamos el JSON de la respuesta
+        json_data = response.json()
+        
+        # Verificamos si 'data' y 'series' están presentes y contienen datos válidos
+        if not json_data.get('data') or not json_data['data'].get('series') or not json_data['data']['series'].get('data'):
+            return {}
+        
+        # Mapeamos los nombres de los campos
+        manhwa_lista = []
+        for item in json_data['data']['series']['data']:
+            # Obtener la URL de la imagen y reemplazar '-lg' o '-xl' según sea necesario
+            cover_url = item.get('cover', '')
+            if cover_url and '-lg' in cover_url:
+                cover_url = cover_url.replace('-lg', '-xl')
+
+            manhwa_lista.append({
+                'poster': cover_url,  # Usamos la URL modificada
+                'titulo': item.get('name', 'Sin título'),  # Si no hay título, colocamos 'Sin título'
+                'url': f"https://zonaolympus.com/series/comic-{item.get('slug', 'sin-slug')}",  # Si no hay slug, colocamos 'sin-slug'
+                'type': item.get('type', 'desconocido'),  # Si no hay tipo, colocamos 'desconocido'
+                'id': item.get('id'),
+                'puntuacion': round(random.uniform(3, 5), 2),
+                'capitulos': item.get('chapter_count', 'No disponible'),
+                'status': item.get('status', {}).get('name', 'desconocido') if item.get('status') else 'desconocido'
+                
+
+
+            })
+        
+        return manhwa_lista
+    
+    except Exception as e:
+        print(f"Error al obtener la lista de manhwas: {e}")
+        return {'error': 'No se pudo obtener la lista de manhwas.'}
+    
 @app.route('/api/getAnimesByGenre', methods=['GET'])
 def api_obtener_animes_por_genero():
     """
@@ -1618,6 +1708,64 @@ def api_cargar_nuevos_capitulos():
 
     # Retorna los datos de los capítulos en formato JSON
     return jsonify({'capitulos': capitulos})
+@app.route('/api/getManwhaBusqueda', methods=['GET'])
+def api_get_manhwa_busqueda():
+    nombre = request.args.get('nombre')
+    
+    if not nombre:
+        return jsonify({'error': 'El parámetro "nombre" es obligatorio.'}), 400
+    
+    # Construimos la URL con el parámetro de búsqueda
+    url_api = f"https://dashboard.zonaolympus.com/api/search?name={nombre.replace(' ', '+')}"
+    
+    # Llamamos a la función para obtener la lista de manhwas
+    manhwa_lista = get_manhwa_busqueda(url_api)
+    
+    if 'error' in manhwa_lista:
+        return jsonify(manhwa_lista), 500
+    
+    return jsonify(manhwa_lista)
+@app.route('/api/getManhwasPorGeneros', methods=['GET'])
+def api_get_manhwas_por_generos():
+    # Obtener los géneros desde los parámetros de la URL (ej. generos=20&generos=1)
+    generos = request.args.get('generos')  
+    
+    if not generos:
+        return jsonify({'error': 'El parámetro "generos" es obligatorio.'}), 400
+    
+    # Si generos es "0", no agregar el parámetro 'genres' a la URL
+    if generos == "0":
+        generos = None
+    
+    # Otros parámetros opcionales como página, dirección y tipo
+    pagina = request.args.get('pagina')  # Página por defecto es 1
+    
+    # Validación de página: si es "0" o no es un número válido, poner la página como 1
+    try:
+        pagina = int(pagina) if pagina else 1  # Si pagina no es None o vacía, lo convierto a int
+    except ValueError:
+        pagina = 1  # Si no es un número válido, asigna 1
+    
+    if pagina == 0:
+        pagina = 1  # Si la página es 0, asigna 1
+
+    direccion = request.args.get('direccion', 'asc')  # Dirección por defecto es 'asc'
+    tipo = request.args.get('tipo', 'comic')  # Tipo de serie (por defecto "comic")
+    
+    # Construir la URL de la API de Zona Olympus con los géneros recibidos (solo incluir 'genres' si no es None)
+    url_api = f"https://zonaolympus.com/api/series?page={pagina}&direction={direccion}&type={tipo}"
+    
+    # Agregar el parámetro de 'genres' solo si generos tiene un valor distinto de None
+    if generos:
+        url_api += f"&genres={generos}"
+    
+    # Llamar a la función para obtener los manhwas de la API
+    manhwa_lista = get_manhwas_de_zonaolympus(url_api)
+    
+    if 'error' in manhwa_lista:
+        return jsonify(manhwa_lista), 500
+    
+    return jsonify(manhwa_lista)
 
 
 if __name__ == '__main__':
