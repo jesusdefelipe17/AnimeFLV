@@ -1261,8 +1261,8 @@ def obtener_manwha_perfil(url_manwha):
         portada = None  # Iniciar variable por si no encuentra ninguna portada
         for item in json_data:
             if isinstance(item, str) and (
-                "https://dashboard.zonaolympus.com/storage/comics/covers" in item or 
-                "https://dashboard.zonaolympus.com/storage/novels/covers" in item
+                "https://dashboard.olympuscomic.com/storage/comics/covers" in item or 
+                "https://dashboard.olympuscomic.com/storage/novels/covers" in item
             ):
                 portada = item
                 break
@@ -1273,7 +1273,7 @@ def obtener_manwha_perfil(url_manwha):
             return {'error': 'No se encontró la portada.'}
 
         # Extraemos la URL base para los capítulos
-        url_capitulos_base = f"https://dashboard.zonaolympus.com/api/series/{url}/chapters" if url else None
+        url_capitulos_base = f"https://dashboard.olympuscomic.com/api/series/{url}/chapters" if url else None
         if not url_capitulos_base:
             print("No se encontró la URL base para capítulos.")
             return {'error': 'No se encontró la URL para los capítulos.'}
@@ -1458,7 +1458,7 @@ def get_manhwa_busqueda(url_api):
         print(f"Error al obtener la lista de manhwas: {e}")
         return {'error': 'No se pudo obtener la lista de manhwas.'}
     
-def get_manhwas_de_zonaolympus(url_api):
+def get_manhwas_de_olympuscomic(url_api):
     """Obtiene la lista de manhwas desde la API de Zona Olympus según los géneros y procesa la respuesta."""
     try:
         print(f"Realizando solicitud GET a {url_api}")
@@ -1506,6 +1506,47 @@ def get_manhwas_de_zonaolympus(url_api):
         print(f"Error al obtener la lista de manhwas: {e}")
         return {'error': 'No se pudo obtener la lista de manhwas.'}
     
+
+def obtener_sliders():
+    """Obtiene los datos de 'slider' desde la API de Olympus Comic."""
+    url = "https://olympuscomic.com/api/homepage"
+    
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        # Parseamos la respuesta JSON
+        datos = response.json()
+        
+        if datos.get("success") and "slider" in datos.get("data", {}):
+            sliders = datos["data"]["slider"]
+            resultado = []
+            
+            # Formatear los sliders en una estructura legible
+            for slider in sliders:
+                resultado.append({
+                    'titulo': slider.get('title', 'Sin título'),
+                    'descripcion': slider.get('description', 'Sin descripción'),
+                    'banner': slider.get('banner'),
+                    'url': slider.get('url')
+                })
+            
+            return resultado
+        else:
+            print("La respuesta no contiene datos esperados.")
+            return []
+    
+    except requests.RequestException as e:
+        print(f"Error en la solicitud HTTP: {e}")
+        return []
+    except Exception as e:
+        print(f"Error inesperado: {e}")
+        return []
+
+
 @app.route('/api/getAnimesByGenre', methods=['GET'])
 def api_obtener_animes_por_genero():
     """
@@ -1721,7 +1762,7 @@ def api_get_manhwa_busqueda():
         return jsonify({'error': 'El parámetro "nombre" es obligatorio.'}), 400
     
     # Construimos la URL con el parámetro de búsqueda
-    url_api = f"https://dashboard.zonaolympus.com/api/search?name={nombre.replace(' ', '+')}"
+    url_api = f"https://dashboard.olympuscomic.com/api/search?name={nombre.replace(' ', '+')}"
     
     # Llamamos a la función para obtener la lista de manhwas
     manhwa_lista = get_manhwa_busqueda(url_api)
@@ -1765,13 +1806,17 @@ def api_get_manhwas_por_generos():
         url_api += f"&genres={generos}"
     
     # Llamar a la función para obtener los manhwas de la API
-    manhwa_lista = get_manhwas_de_zonaolympus(url_api)
+    manhwa_lista = get_manhwas_de_olympuscomic(url_api)
     
     if 'error' in manhwa_lista:
         return jsonify(manhwa_lista), 500
     
     return jsonify(manhwa_lista)
 
+@app.route('/api/Sliders', methods=['GET'])
+def api_obtener_sliders():
+    sliders = obtener_sliders()
+    return jsonify(sliders)
 
 if __name__ == '__main__':
     # Obtén el puerto y maneja el caso donde `PORT` esté vacío
