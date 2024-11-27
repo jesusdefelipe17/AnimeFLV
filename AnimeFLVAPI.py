@@ -1102,7 +1102,7 @@ def obtener_imagenes_manga(url_capitulo):
 
 def obtener_manwhas_mas_populares():
     """Obtiene los manwhas más populares desde la página de Zona Olympus."""
-    url = "https://zonaolympus.com"
+    url = "https://olympuscomic.com"
 
     try:
         headers = {
@@ -1338,7 +1338,7 @@ def obtener_manwhas(page,direction):
     """Obtiene los manwhas desde la API de Zona Olympus para la página dada."""
     try:
         # La URL de la API externa, que requiere el parámetro `page`
-        url = f'https://zonaolympus.com/api/series?page={page}&direction={direction}&type=comic'
+        url = f'https://olympuscomic.com/api/series?page={page}&direction={direction}&type=comic'
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
@@ -1361,7 +1361,7 @@ def obtener_manwhas(page,direction):
             manwhas = [{
                 'id': serie['id'],
                 'titulo': serie['name'],
-                'url': 'https://zonaolympus.com/series/comic-'+serie['slug'],
+                'url': 'https://olympuscomic.com/series/comic-'+serie['slug'],
                 'poster': serie['cover'],
                 'puntuacion' : round(random.uniform(3, 5), 2),
                 'capitulos': serie['chapter_count'],
@@ -1380,7 +1380,7 @@ def obtener_nuevos_capitulos(page):
     """Obtiene los nuevos capítulos desde la API de Zona Olympus para la página dada."""
     try:
         # URL de la API externa con el parámetro `page`
-        url = f'https://zonaolympus.com/api/new-chapters?page={page}'
+        url = f'https://olympuscomic.com/api/new-chapters?page={page}'
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
@@ -1400,7 +1400,7 @@ def obtener_nuevos_capitulos(page):
                 {
                     'id': item['id'],
                     'titulo': item['name'],
-                    'enlace': f"https://zonaolympus.com/api/capitulo/{item['slug']}/{item['last_chapters'][0]['id']}",
+                    'enlace': f"https://olympuscomic.com/api/capitulo/{item['slug']}/{item['last_chapters'][0]['id']}",
                     'portada': item['cover'],
                     'estado': item['status'],
                     'latest_chapter': item['last_chapters'][0] if item['last_chapters'] else None  # Toma solo el capítulo más reciente
@@ -1446,7 +1446,7 @@ def get_manhwa_busqueda(url_api):
             manhwa_lista.append({
                 'poster': cover_url,  # Usamos la URL modificada
                 'titulo': item.get('name'),
-                'url': f"https://zonaolympus.com/series/comic-{item.get('slug')}",
+                'url': f"https://olympuscomic.com/series/comic-{item.get('slug')}",
                 'type': item.get('type'),
                 'id': item.get('id'),
                 'puntuacion' : round(random.uniform(3, 5), 2)
@@ -1489,7 +1489,7 @@ def get_manhwas_de_zonaolympus(url_api):
             manhwa_lista.append({
                 'poster': cover_url,  # Usamos la URL modificada
                 'titulo': item.get('name', 'Sin título'),  # Si no hay título, colocamos 'Sin título'
-                'url': f"https://zonaolympus.com/series/comic-{item.get('slug', 'sin-slug')}",  # Si no hay slug, colocamos 'sin-slug'
+                'url': f"https://olympuscomic.com/series/comic-{item.get('slug', 'sin-slug')}",  # Si no hay slug, colocamos 'sin-slug'
                 'type': item.get('type', 'desconocido'),  # Si no hay tipo, colocamos 'desconocido'
                 'id': item.get('id'),
                 'puntuacion': round(random.uniform(3, 5), 2),
@@ -1758,7 +1758,7 @@ def api_get_manhwas_por_generos():
     tipo = request.args.get('tipo', 'comic')  # Tipo de serie (por defecto "comic")
     
     # Construir la URL de la API de Zona Olympus con los géneros recibidos (solo incluir 'genres' si no es None)
-    url_api = f"https://zonaolympus.com/api/series?page={pagina}&direction={direccion}&type={tipo}"
+    url_api = f"https://olympuscomic.com/api/series?page={pagina}&direction={direccion}&type={tipo}"
     
     # Agregar el parámetro de 'genres' solo si generos tiene un valor distinto de None
     if generos:

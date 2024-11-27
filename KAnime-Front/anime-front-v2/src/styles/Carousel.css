@@ -1,0 +1,80 @@
+/* Contenedor principal del carrusel */
+.carousel-container {
+  width: 100%;
+  padding: 20px 0;
+  margin: 0 auto;
+  text-align: left;
+  position: relative; /* Asegura que el título y el carrusel estén alineados */
+}
+
+/* Asegura que el título y el carrusel comparten alineación */
+.carousel-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 10px; /* Espacio entre el título y el carrusel */
+  color: #ffffff;
+  margin-left: 0; /* Resetea cualquier margen extra */
+  padding-left: 15px; /* Usa el mismo padding que .slick-list */
+}
+
+/* Ajusta el carrusel */
+.slick-list {
+  padding-left: 15px; /* Alineación del carrusel a la izquierda */
+  overflow: hidden; /* Para evitar que sobresalga contenido */
+}
+
+.slick-track {
+  display: flex !important;
+  justify-content: flex-start;
+  gap: 15px; /* Espaciado entre items */
+}
+
+/* Estilo para cada ítem */
+/* Título sobre la imagen */
+.carousel-title-manwha {
+    position: relative;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 10px; /* Espacio entre el título y la imagen */
+    margin-top: 10px;
+  }
+  
+  /* Overlay de la calificación en la esquina inferior derecha */
+  .carousel-overlay {
+    position: absolute;
+    bottom: 10px; /* Separación desde el borde inferior */
+    right: 10px; /* Separación desde el borde derecho */
+    background: rgba(0, 0, 0, 0.904); /* Fondo semi-transparente */
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px; /* Espaciado entre la estrella y la puntuación */
+  }
+  
+  /* Asegura que el contenedor de cada imagen tiene un tamaño consistente */
+  .carousel-item {
+    position: relative; /* Necesario para que el overlay se posicione dentro del item */
+    flex: 0 0 auto;
+    width: calc(100% / 8 - 15px); /* Ajusta el ancho para 8 elementos */
+    height: 400px; /* Asegura que todas las imágenes tengan la misma altura */
+  }
+  
+  /* Imagen del carrusel */
+  .carousel-image {
+    border-radius: 8px;
+    width: 100%;
+    height: 100%; /* Asegura que la imagen ocupa todo el contenedor */
+    object-fit: cover; /* Ajusta la imagen dentro del contenedor sin distorsionarla */
+  }
+  
+
+/* Estrella en la calificación */
+.carousel-overlay .star {
+  font-size: 14px;
+  color: #ffcc00; /* Color dorado para la estrella */
+}

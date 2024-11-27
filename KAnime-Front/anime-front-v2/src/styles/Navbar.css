@@ -1,0 +1,18 @@
+/* Eliminar el color de fondo del Navbar en el archivo CSS */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1000; /* Asegúrate de que el Navbar esté por encima del contenido */
+  /* Eliminamos la propiedad de background-color */
+  padding: 0px 0; /* Ajusta el padding según sea necesario */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* Agrega sombra si lo deseas */
+}
+
+  
+  /* Agregar margen superior al contenido para que no quede tapado por el Navbar */
+  .page-content {
+    margin-top: 60px; /* Ajusta según la altura de tu Navbar */
+  }
+  

@@ -1,0 +1,10 @@
+/* Fondo gradiente de negro a azul, con oscurecimiento progresivo en el scroll */
+.manwhas-page {
+    background: linear-gradient(to bottom, #000000, rgb(0, 0, 0) 50%, #0e1c42); 
+    /* El gradiente comienza con negro, pasa al azul (rgb(46, 85, 255)) en el 70% y luego se oscurece a azul oscuro (#132557) */
+    min-height: 100vh; /* Asegura que ocupe todo el alto de la ventana */
+    display: flex;
+    flex-direction: column;
+    background-attachment: fixed; /* Hace que el fondo se quede fijo mientras haces scroll */
+  }
+  
