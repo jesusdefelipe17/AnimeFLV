@@ -160,26 +160,72 @@ def obtener_imagen_y_descripcion(url_serie):
 class AnimeFLVApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Buscador de Series AnimeFLV")
-        self.root.geometry("1700x800")  # Ajustado el tamaño de la ventana principal
-
-        # Crear el notebook para las pestañas
+        self.root.title("AnimeFLV Viewer")
+        
+        # Configurar el tema y estilo
+        style = ttk.Style()
+        style.theme_use('clam')  # Usar un tema moderno
+        
+        # Configurar colores y estilos personalizados
+        style.configure('TNotebook', background='#2c3e50')
+        style.configure('TNotebook.Tab', padding=[10, 5], background='#34495e', foreground='white')
+        style.map('TNotebook.Tab',
+                 background=[('selected', '#3498db')],
+                 foreground=[('selected', 'white')])
+        style.configure('TFrame', background='#2c3e50')
+        style.configure('TLabel', background='#2c3e50', foreground='white')
+        
+        # Configurar pantalla completa
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # Configurar la ventana para que ocupe toda la pantalla
+        self.root.state('zoomed')  # Maximizar en Windows
+        # Configuración alternativa para otros sistemas operativos
+        if 'zoomed' not in self.root.state():
+            self.root.geometry(f"{screen_width}x{screen_height}+0+0")
+        
+        # Configurar el modo de pantalla completa
+        self.fullscreen = False
+        self.root.bind("<F11>", self.toggle_fullscreen)
+        self.root.bind("<Escape>", self.exit_fullscreen)
+        
+        # Configurar el color de fondo principal
+        self.root.configure(bg='#2c3e50')
+        
+        # Crear el notebook para las pestañas con mejor estilo
         self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
-
-        # Pestaña de búsqueda de series
-        self.tab_busqueda = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_busqueda, text="Buscar Serie")
-
-        # Pestaña de últimos animes
-        self.tab_ultimos = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_ultimos, text="Últimos Animes")
-
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Crear las pestañas con marcos mejorados
+        self.tab_busqueda = ttk.Frame(self.notebook, style='TFrame')
+        self.tab_ultimos = ttk.Frame(self.notebook, style='TFrame')
+        
+        # Añadir las pestañas con iconos
+        self.notebook.add(self.tab_busqueda, text=" 🔍 Buscar Serie ")
+        self.notebook.add(self.tab_ultimos, text=" 🎬 Últimos Animes ")
+        
+        # Crear las interfaces
         self.crear_interfaz_busqueda(self.tab_busqueda)
         self.crear_interfaz_ultimos(self.tab_ultimos)
 
-        # Cargar los últimos animes al iniciar
+        
+        # Cargar los últimos animes
         self.cargar_ultimos_animes()
+        
+        # Centrar las pestañas
+        self.notebook.enable_traversal()
+    def toggle_fullscreen(self, event=None):
+        """Alterna entre modo pantalla completa y ventana normal"""
+        self.fullscreen = not self.fullscreen
+        self.root.attributes("-fullscreen", self.fullscreen)
+        return "break"  # Previene que el evento se propague
+
+    def exit_fullscreen(self, event=None):
+        """Sale del modo pantalla completa"""
+        self.fullscreen = False
+        self.root.attributes("-fullscreen", False)
+        return "break"
 
     def crear_interfaz_busqueda(self, frame):
         """Crea la interfaz de búsqueda de series en la pestaña correspondiente."""

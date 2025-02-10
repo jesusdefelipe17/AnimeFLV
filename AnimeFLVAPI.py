@@ -1102,7 +1102,7 @@ def obtener_imagenes_manga(url_capitulo):
 
 def obtener_manwhas_mas_populares():
     """Obtiene los manwhas más populares desde la página de Zona Olympus."""
-    url = "https://olympuscomic.com"
+    url = "https://olympuslectura.com"
 
     try:
         headers = {
@@ -1261,8 +1261,8 @@ def obtener_manwha_perfil(url_manwha):
         portada = None  # Iniciar variable por si no encuentra ninguna portada
         for item in json_data:
             if isinstance(item, str) and (
-                "https://dashboard.olympuscomic.com/storage/comics/covers" in item or 
-                "https://dashboard.olympuscomic.com/storage/novels/covers" in item
+                "https://dashboard.olympuslectura.com/storage/comics/covers" in item or 
+                "https://dashboard.olympuslectura.com/storage/novels/covers" in item
             ):
                 portada = item
                 break
@@ -1273,7 +1273,7 @@ def obtener_manwha_perfil(url_manwha):
             return {'error': 'No se encontró la portada.'}
 
         # Extraemos la URL base para los capítulos
-        url_capitulos_base = f"https://dashboard.olympuscomic.com/api/series/{url}/chapters" if url else None
+        url_capitulos_base = f"https://dashboard.olympuslectura.com/api/series/{url}/chapters" if url else None
         if not url_capitulos_base:
             print("No se encontró la URL base para capítulos.")
             return {'error': 'No se encontró la URL para los capítulos.'}
@@ -1338,7 +1338,7 @@ def obtener_manwhas(page,direction):
     """Obtiene los manwhas desde la API de Zona Olympus para la página dada."""
     try:
         # La URL de la API externa, que requiere el parámetro `page`
-        url = f'https://olympuscomic.com/api/series?page={page}&direction={direction}&type=comic'
+        url = f'https://olympuslectura.com/api/series?page={page}&direction={direction}&type=comic'
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
@@ -1361,7 +1361,7 @@ def obtener_manwhas(page,direction):
             manwhas = [{
                 'id': serie['id'],
                 'titulo': serie['name'],
-                'url': 'https://olympuscomic.com/series/comic-'+serie['slug'],
+                'url': 'https://olympuslectura.com/series/comic-'+serie['slug'],
                 'poster': serie['cover'],
                 'puntuacion' : round(random.uniform(3, 5), 2),
                 'capitulos': serie['chapter_count'],
@@ -1380,7 +1380,7 @@ def obtener_nuevos_capitulos(page):
     """Obtiene los nuevos capítulos desde la API de Zona Olympus para la página dada."""
     try:
         # URL de la API externa con el parámetro `page`
-        url = f'https://olympuscomic.com/api/new-chapters?page={page}'
+        url = f'https://olympuslectura.com/api/new-chapters?page={page}'
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
@@ -1400,7 +1400,7 @@ def obtener_nuevos_capitulos(page):
                 {
                     'id': item['id'],
                     'titulo': item['name'],
-                    'enlace': f"https://olympuscomic.com/api/capitulo/{item['slug']}/{item['last_chapters'][0]['id']}",
+                    'enlace': f"https://olympuslectura.com/api/capitulo/{item['slug']}/{item['last_chapters'][0]['id']}",
                     'portada': item['cover'],
                     'estado': item['status'],
                     'latest_chapter': item['last_chapters'][0] if item['last_chapters'] else None  # Toma solo el capítulo más reciente
@@ -1446,7 +1446,7 @@ def get_manhwa_busqueda(url_api):
             manhwa_lista.append({
                 'poster': cover_url,  # Usamos la URL modificada
                 'titulo': item.get('name'),
-                'url': f"https://olympuscomic.com/series/comic-{item.get('slug')}",
+                'url': f"https://olympuslectura.com/series/comic-{item.get('slug')}",
                 'type': item.get('type'),
                 'id': item.get('id'),
                 'puntuacion' : round(random.uniform(3, 5), 2)
@@ -1458,7 +1458,7 @@ def get_manhwa_busqueda(url_api):
         print(f"Error al obtener la lista de manhwas: {e}")
         return {'error': 'No se pudo obtener la lista de manhwas.'}
     
-def get_manhwas_de_olympuscomic(url_api):
+def get_manhwas_de_olympuslectura(url_api):
     """Obtiene la lista de manhwas desde la API de Zona Olympus según los géneros y procesa la respuesta."""
     try:
         print(f"Realizando solicitud GET a {url_api}")
@@ -1489,7 +1489,7 @@ def get_manhwas_de_olympuscomic(url_api):
             manhwa_lista.append({
                 'poster': cover_url,  # Usamos la URL modificada
                 'titulo': item.get('name', 'Sin título'),  # Si no hay título, colocamos 'Sin título'
-                'url': f"https://olympuscomic.com/series/comic-{item.get('slug', 'sin-slug')}",  # Si no hay slug, colocamos 'sin-slug'
+                'url': f"https://olympuslectura.com/series/comic-{item.get('slug', 'sin-slug')}",  # Si no hay slug, colocamos 'sin-slug'
                 'type': item.get('type', 'desconocido'),  # Si no hay tipo, colocamos 'desconocido'
                 'id': item.get('id'),
                 'puntuacion': round(random.uniform(3, 5), 2),
@@ -1509,7 +1509,7 @@ def get_manhwas_de_olympuscomic(url_api):
 
 def obtener_sliders():
     """Obtiene los datos de 'slider' desde la API de Olympus Comic."""
-    url = "https://olympuscomic.com/api/homepage"
+    url = "https://olympuslectura.com/api/homepage"
     
     try:
         headers = {
@@ -1762,7 +1762,7 @@ def api_get_manhwa_busqueda():
         return jsonify({'error': 'El parámetro "nombre" es obligatorio.'}), 400
     
     # Construimos la URL con el parámetro de búsqueda
-    url_api = f"https://dashboard.olympuscomic.com/api/search?name={nombre.replace(' ', '+')}"
+    url_api = f"https://dashboard.olympuslectura.com/api/search?name={nombre.replace(' ', '+')}"
     
     # Llamamos a la función para obtener la lista de manhwas
     manhwa_lista = get_manhwa_busqueda(url_api)
@@ -1799,14 +1799,14 @@ def api_get_manhwas_por_generos():
     tipo = request.args.get('tipo', 'comic')  # Tipo de serie (por defecto "comic")
     
     # Construir la URL de la API de Zona Olympus con los géneros recibidos (solo incluir 'genres' si no es None)
-    url_api = f"https://olympuscomic.com/api/series?page={pagina}&direction={direccion}&type={tipo}"
+    url_api = f"https://olympuslectura.com/api/series?page={pagina}&direction={direccion}&type={tipo}"
     
     # Agregar el parámetro de 'genres' solo si generos tiene un valor distinto de None
     if generos:
         url_api += f"&genres={generos}"
     
     # Llamar a la función para obtener los manhwas de la API
-    manhwa_lista = get_manhwas_de_olympuscomic(url_api)
+    manhwa_lista = get_manhwas_de_olympuslectura(url_api)
     
     if 'error' in manhwa_lista:
         return jsonify(manhwa_lista), 500
